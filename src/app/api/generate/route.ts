@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import type { Topic } from "@/lib/types";
-import { chatJson } from "@/lib/llm";
+import { chatJson, getLlmConfig } from "@/lib/llm";
 import { buildGenerationPrompt, parseQuestions } from "@/lib/questionSchema";
 import { SEED_QUESTIONS } from "@/data/questions";
 import { hasValidSession } from "@/lib/auth";
 import { tryConsumeLlmCall } from "@/lib/rateLimit";
+import { BYOK_HEADER } from "@/lib/userKey";
 
 const VALID_TOPICS = new Set<Topic>([
   "ai-act",
@@ -22,7 +23,13 @@ function fallback(topic: Topic, count: number) {
 }
 
 export async function POST(req: Request) {
-  if (!(await hasValidSession())) {
+  // BYOK: a user-provided key bypasses the access gate and the daily cap —
+  // both exist only to protect the server's own key/credits. The user's key
+  // is used for this call only and never stored or logged.
+  const byokKey = req.headers.get(BYOK_HEADER)?.trim() || "";
+  const byok = byokKey.length > 0;
+
+  if (!byok && !(await hasValidSession())) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -40,8 +47,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "unknown topic" }, { status: 400 });
   }
 
-  // Daily cost cap — checked BEFORE the LLM call. Over cap -> seeded fallback.
-  if (!tryConsumeLlmCall()) {
+  // Daily cost cap applies only to the server key. BYOK spends the user's own
+  // credits, so it is not capped. Over cap (server mode) -> seeded fallback.
+  if (!byok && !tryConsumeLlmCall()) {
     return NextResponse.json({
       questions: fallback(topic, count),
       source: "fallback",
@@ -52,10 +60,13 @@ export async function POST(req: Request) {
   const { system, user } = buildGenerationPrompt(topic, count, body.articleText);
 
   try {
-    const raw = await chatJson([
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ]);
+    const raw = await chatJson(
+      [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      getLlmConfig(byokKey || undefined),
+    );
     const questions = parseQuestions(raw, topic);
 
     if (questions.length === 0) {

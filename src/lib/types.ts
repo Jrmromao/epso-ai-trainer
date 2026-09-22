@@ -48,6 +48,32 @@ export function isNumerical(q: Question): q is NumericalQuestion {
   return q.topic === "numerical";
 }
 
+// The five exam components of EPSO/AD/430/26. This is the tracking taxonomy —
+// broader than Topic, because abstract reasoning and the EUFTE essay are
+// tracked/coached but NOT generated in-app.
+export type ExamComponent =
+  | "field-ai"
+  | "verbal"
+  | "numerical"
+  | "abstract"
+  | "essay";
+
+export const COMPONENT_LABELS: Record<ExamComponent, string> = {
+  "field-ai": "Field AI (MCQ)",
+  verbal: "Verbal Reasoning",
+  numerical: "Numerical Reasoning",
+  abstract: "Abstract Reasoning",
+  essay: "EUFTE Essay",
+};
+
+// Map a generatable Topic to its exam component. The 6 AI field topics all roll
+// up to "field-ai"; verbal/numerical map 1:1.
+export function componentForTopic(topic: Topic): ExamComponent {
+  if (topic === "verbal") return "verbal";
+  if (topic === "numerical") return "numerical";
+  return "field-ai";
+}
+
 // One answered item in a mock run.
 export interface AnswerRecord {
   questionId: string;

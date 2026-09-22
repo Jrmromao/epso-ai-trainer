@@ -10,6 +10,8 @@ import {
   isNumerical,
 } from "@/lib/types";
 import { useMockHistory } from "@/lib/useMockHistory";
+import { useProgress } from "@/lib/useProgress";
+import { llmHeaders } from "@/lib/userKey";
 
 const SECONDS_PER_QUESTION = 80; // mirrors the real ~40min / 30Q pace
 
@@ -32,6 +34,7 @@ export default function MockRunner({
   const [assessing, setAssessing] = useState(false);
 
   const { record: recordRun } = useMockHistory();
+  const { recordRun: recordProgress } = useProgress();
 
   const current = questions[index];
 
@@ -79,10 +82,11 @@ export default function MockRunner({
   useEffect(() => {
     if (!finished) return;
     recordRun(topic, records);
+    recordProgress(records);
     setAssessing(true);
     fetch("/api/assess", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: llmHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ results: records }),
     })
       .then((r) => r.json())

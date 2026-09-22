@@ -3,6 +3,9 @@ import { TOPIC_LABELS, type Topic } from "@/lib/types";
 import { SEED_QUESTIONS } from "@/data/questions";
 import StudyExternallyPanel from "@/components/StudyExternallyPanel";
 import AccessGate from "@/components/AccessGate";
+import ByokPanel from "@/components/ByokPanel";
+import StudyDashboard from "@/components/StudyDashboard";
+import ProgressTools from "@/components/ProgressTools";
 
 const FIELD_TOPICS: Topic[] = [
   "ai-act",
@@ -113,6 +116,9 @@ export default function Home() {
         </ul>
       </div>
 
+      <StudyDashboard />
+      <ProgressTools />
+
       <h2 className="mt-8 text-lg font-semibold">Field knowledge (the ranking test)</h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {FIELD_TOPICS.map((t) => (
@@ -128,6 +134,7 @@ export default function Home() {
       </div>
 
       <AccessGate />
+      <ByokPanel />
 
       <StudyExternallyPanel />
     </main>

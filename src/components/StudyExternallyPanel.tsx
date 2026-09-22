@@ -45,7 +45,7 @@ export default function StudyExternallyPanel() {
   }
 
   return (
-    <section className="mt-10 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
+    <section id="study-externally" className="mt-10 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
       <h2 className="font-semibold text-amber-900">
         Study externally &mdash; not covered by this app
       </h2>

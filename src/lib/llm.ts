@@ -12,12 +12,19 @@ export interface LlmConfig {
   model: string;
 }
 
-export function getLlmConfig(): LlmConfig {
-  const baseUrl = process.env.LLM_BASE_URL;
-  const apiKey = process.env.LLM_API_KEY;
-  const model = process.env.LLM_MODEL ?? "deepseek-chat";
-  if (!baseUrl || !apiKey) {
-    throw new Error("LLM not configured: set LLM_BASE_URL and LLM_API_KEY");
+const DEFAULT_BASE_URL = "https://api.deepseek.com";
+const DEFAULT_MODEL = "deepseek-chat";
+
+// Resolve the LLM config. When a BYOK key is supplied (user-provided, per
+// request), it takes precedence over the server key and base URL/model fall
+// back to the DeepSeek defaults so BYOK works even with no server env set.
+// The BYOK key is never persisted or logged — it lives only for this call.
+export function getLlmConfig(overrideKey?: string): LlmConfig {
+  const baseUrl = process.env.LLM_BASE_URL ?? DEFAULT_BASE_URL;
+  const model = process.env.LLM_MODEL ?? DEFAULT_MODEL;
+  const apiKey = overrideKey?.trim() || process.env.LLM_API_KEY;
+  if (!apiKey) {
+    throw new Error("LLM not configured: provide a key (BYOK) or set LLM_API_KEY");
   }
   return { baseUrl, apiKey, model };
 }

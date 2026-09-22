@@ -5,9 +5,10 @@ import {
   type Topic,
   TOPIC_LABELS,
 } from "@/lib/types";
-import { chatJson } from "@/lib/llm";
+import { chatJson, getLlmConfig } from "@/lib/llm";
 import { hasValidSession } from "@/lib/auth";
 import { tryConsumeLlmCall } from "@/lib/rateLimit";
+import { BYOK_HEADER } from "@/lib/userKey";
 
 // Deterministic fallback: derive weak topics straight from the score data.
 // Used when the LLM is unavailable — never leaves the user without a report.
@@ -59,7 +60,11 @@ function buildAssessPrompt(records: AnswerRecord[]): { system: string; user: str
 }
 
 export async function POST(req: Request) {
-  if (!(await hasValidSession())) {
+  // BYOK bypasses the access gate and daily cap, consistent with generate/exam.
+  const byokKey = req.headers.get(BYOK_HEADER)?.trim() || "";
+  const byok = byokKey.length > 0;
+
+  if (!byok && !(await hasValidSession())) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -75,8 +80,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "no results provided" }, { status: 400 });
   }
 
-  // Over the daily cap -> deterministic (no-LLM) report, still useful.
-  if (!tryConsumeLlmCall()) {
+  // Over the daily cap (server mode only) -> deterministic (no-LLM) report.
+  if (!byok && !tryConsumeLlmCall()) {
     return NextResponse.json({
       ...deterministicAssessment(records),
       source: "fallback",
@@ -86,10 +91,13 @@ export async function POST(req: Request) {
   const { system, user } = buildAssessPrompt(records);
 
   try {
-    const raw = await chatJson([
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ]);
+    const raw = await chatJson(
+      [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      getLlmConfig(byokKey || undefined),
+    );
     const parsed = JSON.parse(raw) as Partial<AssessmentResult>;
 
     // Validate the LLM shape; fall back if malformed.

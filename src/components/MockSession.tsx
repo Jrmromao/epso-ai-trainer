@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Question, Topic } from "@/lib/types";
 import MockRunner from "@/components/MockRunner";
+import { llmHeaders } from "@/lib/userKey";
 
 // Client wrapper around MockRunner. Lets the user run the seeded bank OR
 // generate fresh questions via /api/generate (spec AC5). Keyed remount
@@ -28,7 +29,7 @@ export default function MockSession({
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: llmHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           topic,
           count,
@@ -36,7 +37,9 @@ export default function MockSession({
         }),
       });
       if (res.status === 401) {
-        setNotice("Locked — enter your access code on the home page first.");
+        setNotice(
+          "Locked — enter your access code, or set your own key (BYOK), on the home page.",
+        );
         return;
       }
       const data = (await res.json()) as {

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Question } from "@/lib/types";
 import ExamRunner from "@/components/ExamRunner";
+import { llmHeaders } from "@/lib/userKey";
 
 interface ExamData {
   questions: Question[];
@@ -21,9 +22,14 @@ export default function ExamPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/exam", { method: "POST" });
+      const res = await fetch("/api/exam", {
+        method: "POST",
+        headers: llmHeaders(),
+      });
       if (res.status === 401) {
-        setError("Locked — enter your access code on the home page first.");
+        setError(
+          "Locked — enter your access code, or set your own key (BYOK), on the home page.",
+        );
         return;
       }
       const data = (await res.json()) as ExamData;

@@ -9,6 +9,8 @@ import {
   isNumerical,
 } from "@/lib/types";
 import { useMockHistory } from "@/lib/useMockHistory";
+import { useProgress } from "@/lib/useProgress";
+import { llmHeaders } from "@/lib/userKey";
 
 const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D"];
 const PASS_MARK = 15;
@@ -50,6 +52,7 @@ export default function ExamRunner({
   const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
 
   const { record: recordRun } = useMockHistory();
+  const { recordRun: recordProgress } = useProgress();
   const current = questions[index];
 
   const finish = useCallback(() => {
@@ -89,9 +92,10 @@ export default function ExamRunner({
   useEffect(() => {
     if (!finished || records.length === 0) return;
     recordRun("ai-act", records); // exam is AI-field; logged under the competition
+    recordProgress(records, "field-ai"); // force field-ai component for the whole exam
     fetch("/api/assess", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: llmHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ results: records }),
     })
       .then((r) => r.json())
