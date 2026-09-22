@@ -80,6 +80,11 @@ export class IndexedDbProgressRepo implements ProgressRepo {
 
     const buckets = new Map<string, WeakArea>();
     for (const a of all) {
+      // Migrated legacy runs are low-fidelity aggregate history (one old run
+      // expanded into N same-timestamp points). They skew accuracy + recency,
+      // so they are excluded from the weak-area signal that drives the plan.
+      // They remain in the store (exportable) and countable via getHistoryTotals.
+      if (a.questionId.startsWith("migrated:")) continue;
       const key = bucketKey(a.component, a.topic);
       const wa =
         buckets.get(key) ??
@@ -150,8 +155,15 @@ export class IndexedDbProgressRepo implements ProgressRepo {
     return due.sort((a, b) => a.dueMs - b.dueMs); // most overdue first
   }
 
-  async exportAll(): Promise<ProgressSnapshot> {
+  async getHistoryTotals(): Promise<{ freshAttempts: number; migratedAttempts: number }> {
     const db = await this.db();
+    const all = await db.getAll(STORE);
+    let migrated = 0;
+    for (const a of all) if (a.questionId.startsWith("migrated:")) migrated += 1;
+    return { freshAttempts: all.length - migrated, migratedAttempts: migrated };
+  }
+
+  async exportAll(): Promise<ProgressSnapshot> {    const db = await this.db();
     const attempts = await db.getAll(STORE);
     return { version: 1, exportedAtMs: Date.now(), attempts };
   }

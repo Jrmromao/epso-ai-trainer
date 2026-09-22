@@ -46,6 +46,7 @@ export interface ProgressRepo {
   recordAttempts(attempts: Omit<Attempt, "id">[]): Promise<void>;
   getWeakAreas(): Promise<WeakArea[]>;
   getDueForReview(nowMs?: number): Promise<DueItem[]>;
+  getHistoryTotals(): Promise<{ freshAttempts: number; migratedAttempts: number }>;
   exportAll(): Promise<ProgressSnapshot>;
   importAll(snapshot: ProgressSnapshot): Promise<{ imported: number }>;
   clear(): Promise<void>;

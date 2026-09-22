@@ -5,6 +5,7 @@ import StudyExternallyPanel from "@/components/StudyExternallyPanel";
 import AccessGate from "@/components/AccessGate";
 import ByokPanel from "@/components/ByokPanel";
 import StudyDashboard from "@/components/StudyDashboard";
+import WeeklyPlan from "@/components/WeeklyPlan";
 import ProgressTools from "@/components/ProgressTools";
 
 const FIELD_TOPICS: Topic[] = [
@@ -117,6 +118,7 @@ export default function Home() {
       </div>
 
       <StudyDashboard />
+      <WeeklyPlan />
       <ProgressTools />
 
       <h2 className="mt-8 text-lg font-semibold">Field knowledge (the ranking test)</h2>
