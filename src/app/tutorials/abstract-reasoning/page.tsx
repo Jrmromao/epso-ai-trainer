@@ -14,6 +14,41 @@ interface PatternType {
   spot: string;
 }
 
+// Dot positions on a 100x100 square, for the hand-drawn worked-example figures.
+// These are STATIC teaching illustrations (not generated questions) — a textbook
+// figure, not the LLM-generated content the app deliberately avoids for abstract.
+const POS: Record<string, [number, number]> = {
+  "top-left": [20, 20],
+  top: [50, 16],
+  "top-right": [80, 20],
+  left: [16, 50],
+  center: [50, 50],
+  right: [84, 50],
+  "bottom-left": [20, 80],
+  bottom: [50, 84],
+  "bottom-right": [80, 80],
+};
+
+// One square frame with zero or more dots at named positions.
+function Frame({ dots, label }: { dots: string[]; label?: string }) {
+  return (
+    <figure className="flex flex-col items-center">
+      {label && <figcaption className="mb-1 text-xs font-semibold text-neutral-600">{label}</figcaption>}
+      <svg viewBox="0 0 100 100" className="h-16 w-16" role="img" aria-label={`Square with dots at ${dots.join(", ") || "no positions"}`}>
+        <rect x="4" y="4" width="92" height="92" fill="white" stroke="#404040" strokeWidth="2" />
+        {dots.map((d) => {
+          const [cx, cy] = POS[d] ?? POS.center;
+          return <circle key={d} cx={cx} cy={cy} r="7" fill="#171717" />;
+        })}
+      </svg>
+    </figure>
+  );
+}
+
+function FrameRow({ children }: { children: React.ReactNode }) {
+  return <div className="mt-3 flex flex-wrap items-end gap-3">{children}</div>;
+}
+
 const PATTERN_TYPES: PatternType[] = [
   {
     name: "Rotation",
@@ -108,6 +143,104 @@ export default function AbstractReasoningTutorial() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-xl font-semibold">Worked examples</h2>
+        <p className="mt-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          These are hand-drawn teaching illustrations to show the reasoning
+          process, not real EPSO items. The real test figures are more complex
+          and you are under time pressure — always practise the actual figures on
+          the official mocks linked below.
+        </p>
+
+        <div className="mt-4 rounded-lg border border-neutral-200 bg-white p-4">
+          <h3 className="font-semibold">Example 1 — a moving dot (Translation)</h3>
+          <p className="mt-1 text-sm text-neutral-700">
+            The sequence: which figure comes next?
+          </p>
+          <FrameRow>
+            <Frame dots={["top-left"]} label="1" />
+            <Frame dots={["top-right"]} label="2" />
+            <Frame dots={["bottom-right"]} label="3" />
+            <Frame dots={["bottom-left"]} label="4" />
+            <Frame dots={[]} label="?" />
+          </FrameRow>
+          <p className="mt-3 text-sm font-medium text-neutral-700">Options:</p>
+          <FrameRow>
+            <Frame dots={["center"]} label="A" />
+            <Frame dots={["top-left"]} label="B" />
+            <Frame dots={["bottom-right"]} label="C" />
+            <Frame dots={["top"]} label="D" />
+            <Frame dots={["bottom"]} label="E" />
+          </FrameRow>
+          <div className="mt-3 text-sm text-neutral-700">
+            <p className="font-medium">Reasoning:</p>
+            <ol className="mt-1 list-decimal space-y-1 pl-5">
+              <li>Isolate the single element: one dot.</li>
+              <li>
+                Track its path: top-left &rarr; top-right &rarr; bottom-right
+                &rarr; bottom-left. It moves <strong>clockwise around the four
+                corners</strong>, one corner per frame.
+              </li>
+              <li>Predict the next state: after bottom-left, the cycle returns to top-left.</li>
+              <li>
+                Eliminate: A (centre), C (bottom-right), D (top edge), E (bottom
+                edge) all break the corner-clockwise rule.
+              </li>
+              <li>
+                Answer: <strong>B</strong> (dot at top-left).
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-neutral-200 bg-white p-4">
+          <h3 className="font-semibold">Example 2 — a growing count (Addition)</h3>
+          <p className="mt-1 text-sm text-neutral-700">
+            The sequence: which figure comes next?
+          </p>
+          <FrameRow>
+            <Frame dots={["top-left"]} label="1" />
+            <Frame dots={["top-left", "top-right"]} label="2" />
+            <Frame dots={["top-left", "top-right", "bottom-right"]} label="3" />
+            <Frame dots={[]} label="?" />
+          </FrameRow>
+          <p className="mt-3 text-sm font-medium text-neutral-700">Options:</p>
+          <FrameRow>
+            <Frame dots={["top-left", "top-right", "bottom-right"]} label="A" />
+            <Frame dots={["top-left", "top-right", "bottom-right", "bottom-left"]} label="B" />
+            <Frame dots={["center"]} label="C" />
+            <Frame dots={["top-left", "bottom-right"]} label="D" />
+            <Frame dots={["top-left", "top-right", "bottom-right", "bottom-left", "center"]} label="E" />
+          </FrameRow>
+          <div className="mt-3 text-sm text-neutral-700">
+            <p className="font-medium">Reasoning:</p>
+            <ol className="mt-1 list-decimal space-y-1 pl-5">
+              <li>Count the dots per frame: 1, 2, 3&hellip; the count rises by one each time.</li>
+              <li>
+                Track WHERE each new dot appears: they fill the corners clockwise
+                from top-left (TL, then TR, then BR&hellip;), so the fourth is
+                bottom-left.
+              </li>
+              <li>Predict: frame 4 has four dots, all four corners filled.</li>
+              <li>
+                Eliminate: A (still 3), C (1, wrong), D (2, wrong), E (5 — adds a
+                centre dot the rule never introduces).
+              </li>
+              <li>
+                Answer: <strong>B</strong> (all four corners).
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <p className="mt-3 text-sm text-neutral-600">
+          Notice the method is identical each time: isolate the element(s), find
+          the rule per element, predict, then eliminate options that break any
+          rule. On a hard AD-level item several rules run at once &mdash; do this
+          for each independently.
+        </p>
       </section>
 
       <section className="mt-8">

@@ -58,15 +58,19 @@ export default function StudyExternallyPanel() {
         , then practise the actual figures on validated sources and log your
         scores here.
       </p>
-      <ul className="mt-2 list-disc pl-5 text-amber-800">
+      <p className="mt-3 font-medium text-amber-900">
+        Official EPSO practice (free, authoritative &mdash; your difficulty
+        benchmark)
+      </p>
+      <ul className="mt-1 list-disc pl-5 text-amber-800">
         <li>
           <a
             className="underline"
-            href="https://eu-careers.europa.eu/en/selection-procedure/epso-tests"
+            href="https://eu-careers.europa.eu/en/sample-tests/reasoning-tests"
             target="_blank"
             rel="noreferrer"
           >
-            Official EPSO sample tests
+            Reasoning sample tests (verbal / numerical / abstract)
           </a>
         </li>
         <li>
@@ -76,10 +80,37 @@ export default function StudyExternallyPanel() {
             target="_blank"
             rel="noreferrer"
           >
-            Official reasoning mock (PDF)
+            Reasoning mock &mdash; Part 1 (PDF, new competition model)
+          </a>
+        </li>
+        <li>
+          <a
+            className="underline"
+            href="https://eu-careers.europa.eu/system/files/2023-06/140613%20Sample%20mock-test%20EPSO%20new%20competition%20model.pdf"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Short mock &mdash; 13 items, 1 min each, answers at the end (PDF)
+          </a>
+        </li>
+        <li>
+          <a
+            className="underline"
+            href="https://eu-careers.europa.eu/en/selection-procedure/epso-tests"
+            target="_blank"
+            rel="noreferrer"
+          >
+            EPSO tests overview (per staff category &mdash; see AD6&ndash;AD9)
           </a>
         </li>
       </ul>
+      <p className="mt-2 text-xs text-amber-700">
+        The competition notice (C/2026/4668) and your EPSO candidate account are
+        the authoritative source for the exact AD/430/26 test structure and
+        dates. EPSO does not endorse any external prep publisher; commercial
+        platforms (e.g. EU&nbsp;Training, ArcoMonitor) are optional supplements,
+        not official.
+      </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <select
