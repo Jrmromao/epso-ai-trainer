@@ -1,4 +1,4 @@
-import type { ExamComponent, Topic } from "@/lib/types";
+import type { ChoiceKey, ExamComponent, Question, Topic } from "@/lib/types";
 
 // One recorded practice attempt at a single question. This is the atomic unit
 // the weak-area tracker aggregates over. Stored locally (IndexedDB).
@@ -38,6 +38,31 @@ export interface ProgressSnapshot {
   attempts: Attempt[];
 }
 
+// One question inside a saved test, with the full content needed to review it
+// later (stem, options, correct answer, explanation, table) plus what the user
+// chose. Storing the whole Question means the review screen shows everything
+// without re-generating or looking anything up.
+export interface ReviewItem {
+  question: Question;
+  chosen: ChoiceKey | null; // null = left unanswered / timed out
+  correct: boolean;
+}
+
+// A completed test, saved so the user can revisit their wrong answers (and the
+// correct answer + explanation) afterwards — no note-taking needed during the
+// timed test. Kept in a separate IndexedDB store from `attempts` because it is
+// heavy content queried only on the review screen, not aggregated per-attempt.
+export interface TestReview {
+  id: string; // uuid
+  dateMs: number;
+  label: string; // e.g. "Full exam" or the topic label
+  component: ExamComponent;
+  topic: Topic | null;
+  correct: number;
+  total: number;
+  items: ReviewItem[];
+}
+
 // Storage abstraction. IndexedDB backs this today; a hosted DB (Turso/Vercel PG)
 // could be swapped in behind the same interface if cross-device sync is ever
 // needed — without touching tracking/dashboard logic.
@@ -50,4 +75,9 @@ export interface ProgressRepo {
   exportAll(): Promise<ProgressSnapshot>;
   importAll(snapshot: ProgressSnapshot): Promise<{ imported: number }>;
   clear(): Promise<void>;
+  // Saved test reviews (see wrong answers + correct answer afterwards).
+  saveTestReview(review: Omit<TestReview, "id">): Promise<string>; // returns new id
+  listTestReviews(): Promise<TestReview[]>; // newest first, no items (list view)
+  getTestReview(id: string): Promise<TestReview | null>; // full, with items
+  deleteTestReview(id: string): Promise<void>;
 }

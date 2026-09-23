@@ -5,6 +5,7 @@ import type {
   DueItem,
   ProgressRepo,
   ProgressSnapshot,
+  TestReview,
   WeakArea,
 } from "@/lib/storage/progressRepo";
 
@@ -12,14 +13,20 @@ import type {
 // network. Handles thousands of attempts comfortably (unlike localStorage).
 
 const DB_NAME = "epso-progress";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = "attempts";
+const REVIEW_STORE = "reviews";
 
 interface ProgressDb extends DBSchema {
   attempts: {
     key: string;
     value: Attempt;
     indexes: { "by-question": string; "by-component": string };
+  };
+  reviews: {
+    key: string;
+    value: TestReview;
+    indexes: { "by-date": number };
   };
 }
 
@@ -49,10 +56,18 @@ export class IndexedDbProgressRepo implements ProgressRepo {
     }
     if (!this.dbPromise) {
       this.dbPromise = openDB<ProgressDb>(DB_NAME, DB_VERSION, {
-        upgrade(db) {
-          const store = db.createObjectStore(STORE, { keyPath: "id" });
-          store.createIndex("by-question", "questionId");
-          store.createIndex("by-component", "component");
+        upgrade(db, oldVersion) {
+          // v1: attempts store. Created on fresh installs and preserved on upgrade.
+          if (oldVersion < 1) {
+            const store = db.createObjectStore(STORE, { keyPath: "id" });
+            store.createIndex("by-question", "questionId");
+            store.createIndex("by-component", "component");
+          }
+          // v2: reviews store (saved completed tests for later review).
+          if (oldVersion < 2) {
+            const reviews = db.createObjectStore(REVIEW_STORE, { keyPath: "id" });
+            reviews.createIndex("by-date", "dateMs");
+          }
         },
       });
     }
@@ -190,6 +205,33 @@ export class IndexedDbProgressRepo implements ProgressRepo {
   async clear(): Promise<void> {
     const db = await this.db();
     await db.clear(STORE);
+  }
+
+  async saveTestReview(review: Omit<TestReview, "id">): Promise<string> {
+    const db = await this.db();
+    const id = uuid();
+    await db.add(REVIEW_STORE, { ...review, id });
+    return id;
+  }
+
+  // List view: strip the heavy `items` array so the history list loads fast.
+  // Newest first.
+  async listTestReviews(): Promise<TestReview[]> {
+    const db = await this.db();
+    const all = await db.getAllFromIndex(REVIEW_STORE, "by-date");
+    return all
+      .map((r) => ({ ...r, items: [] }))
+      .sort((a, b) => b.dateMs - a.dateMs);
+  }
+
+  async getTestReview(id: string): Promise<TestReview | null> {
+    const db = await this.db();
+    return (await db.get(REVIEW_STORE, id)) ?? null;
+  }
+
+  async deleteTestReview(id: string): Promise<void> {
+    const db = await this.db();
+    await db.delete(REVIEW_STORE, id);
   }
 }
 

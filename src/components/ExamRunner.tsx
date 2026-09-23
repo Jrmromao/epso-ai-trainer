@@ -10,6 +10,7 @@ import {
 } from "@/lib/types";
 import { useMockHistory } from "@/lib/useMockHistory";
 import { useProgress } from "@/lib/useProgress";
+import { useTestReview } from "@/lib/useTestReview";
 import { llmHeaders } from "@/lib/userKey";
 
 const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D", "E"];
@@ -50,9 +51,11 @@ export default function ExamRunner({
   const [finished, setFinished] = useState(false);
   const [records, setRecords] = useState<AnswerRecord[]>([]);
   const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
+  const [reviewId, setReviewId] = useState<string | null>(null);
 
   const { record: recordRun } = useMockHistory();
   const { recordRun: recordProgress } = useProgress();
+  const { saveReview } = useTestReview();
   const current = questions[index];
 
   const finish = useCallback(() => {
@@ -93,6 +96,7 @@ export default function ExamRunner({
     if (!finished || records.length === 0) return;
     recordRun("ai-act", records); // exam is AI-field; logged under the competition
     recordProgress(records, "field-ai"); // force field-ai component for the whole exam
+    saveReview("Full exam", questions, records, "field-ai").then(setReviewId);
     fetch("/api/assess", {
       method: "POST",
       headers: llmHeaders({ "Content-Type": "application/json" }),
@@ -203,9 +207,17 @@ export default function ExamRunner({
           })}
         </div>
 
-        <a href="/" className="mt-6 inline-block rounded bg-neutral-900 px-4 py-2 text-white">
-          Back to topics
-        </a>
+        <div className="mt-6 flex flex-wrap gap-2">
+          <a
+            href={reviewId ? `/history?test=${reviewId}` : "/history"}
+            className="inline-block rounded bg-neutral-900 px-4 py-2 text-white"
+          >
+            Save to history &amp; review later
+          </a>
+          <a href="/" className="inline-block rounded border border-neutral-300 px-4 py-2">
+            Back to topics
+          </a>
+        </div>
       </div>
     );
   }

@@ -8,9 +8,11 @@ import {
   type Question,
   type Topic,
   isNumerical,
+  TOPIC_LABELS,
 } from "@/lib/types";
 import { useMockHistory } from "@/lib/useMockHistory";
 import { useProgress } from "@/lib/useProgress";
+import { useTestReview } from "@/lib/useTestReview";
 import { llmHeaders } from "@/lib/userKey";
 import Calculator from "@/components/Calculator";
 import QuestionTableView from "@/components/QuestionTableView";
@@ -35,9 +37,11 @@ export default function MockRunner({
   const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
   const [assessing, setAssessing] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
+  const [reviewId, setReviewId] = useState<string | null>(null);
 
   const { record: recordRun } = useMockHistory();
   const { recordRun: recordProgress } = useProgress();
+  const { saveReview } = useTestReview();
 
   const current = questions[index];
 
@@ -86,6 +90,7 @@ export default function MockRunner({
     if (!finished) return;
     recordRun(topic, records);
     recordProgress(records);
+    saveReview(TOPIC_LABELS[topic], questions, records).then(setReviewId);
     setAssessing(true);
     fetch("/api/assess", {
       method: "POST",
@@ -132,12 +137,20 @@ export default function MockRunner({
           </div>
         )}
 
-        <a
-          href="/"
-          className="mt-4 inline-block rounded bg-neutral-900 px-4 py-2 text-white"
-        >
-          Back to topics
-        </a>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <a
+            href={reviewId ? `/history?test=${reviewId}` : "/history"}
+            className="inline-block rounded bg-neutral-900 px-4 py-2 text-white"
+          >
+            Review this test
+          </a>
+          <a
+            href="/"
+            className="inline-block rounded border border-neutral-300 px-4 py-2"
+          >
+            Back to topics
+          </a>
+        </div>
       </div>
     );
   }

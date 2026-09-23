@@ -119,6 +119,19 @@ export default function Home() {
 
       <StudyDashboard />
       <WeeklyPlan />
+
+      <h2 className="mt-8 text-lg font-semibold">Test history &amp; review</h2>
+      <p className="mt-1 text-sm text-neutral-500">
+        Every completed mock and exam is saved. Review your wrong answers, the
+        correct answer, and the explanation — no note-taking during the test.
+      </p>
+      <Link
+        href="/history"
+        className="mt-2 inline-block rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium transition hover:border-neutral-900"
+      >
+        View test history &rarr;
+      </Link>
+
       <ProgressTools />
 
       <h2 className="mt-8 text-lg font-semibold">Field knowledge (the ranking test)</h2>
