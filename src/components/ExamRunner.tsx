@@ -12,7 +12,7 @@ import { useMockHistory } from "@/lib/useMockHistory";
 import { useProgress } from "@/lib/useProgress";
 import { llmHeaders } from "@/lib/userKey";
 
-const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D"];
+const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D", "E"];
 const PASS_MARK = 15;
 const PER_Q_TARGET = 80; // soft pace target in seconds
 

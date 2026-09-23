@@ -12,10 +12,12 @@ import {
 import { useMockHistory } from "@/lib/useMockHistory";
 import { useProgress } from "@/lib/useProgress";
 import { llmHeaders } from "@/lib/userKey";
+import Calculator from "@/components/Calculator";
+import QuestionTableView from "@/components/QuestionTableView";
 
 const SECONDS_PER_QUESTION = 80; // mirrors the real ~40min / 30Q pace
 
-const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D"];
+const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D", "E"];
 
 export default function MockRunner({
   topic,
@@ -32,6 +34,7 @@ export default function MockRunner({
   const [finished, setFinished] = useState(false);
   const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
   const [assessing, setAssessing] = useState(false);
+  const [showCalc, setShowCalc] = useState(false);
 
   const { record: recordRun } = useMockHistory();
   const { recordRun: recordProgress } = useProgress();
@@ -152,7 +155,25 @@ export default function MockRunner({
         </span>
       </div>
 
+      {current.table && <QuestionTableView table={current.table} />}
+
       <p className="mt-3 whitespace-pre-line font-medium">{current.stem}</p>
+
+      {topic === "numerical" && (
+        <div className="mt-3">
+          <button
+            onClick={() => setShowCalc((v) => !v)}
+            className="rounded border border-neutral-300 px-3 py-1 text-sm hover:border-neutral-900"
+          >
+            {showCalc ? "Hide calculator" : "Show calculator"}
+          </button>
+          {showCalc && (
+            <div className="mt-2">
+              <Calculator />
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 space-y-2">
         {CHOICE_KEYS.map((k) => {

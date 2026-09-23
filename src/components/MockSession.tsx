@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Question, Topic } from "@/lib/types";
 import MockRunner from "@/components/MockRunner";
+import NumericalLearn from "@/components/NumericalLearn";
 import { llmHeaders } from "@/lib/userKey";
 
 // Client wrapper around MockRunner. Lets the user run the seeded bank OR
@@ -22,6 +23,9 @@ export default function MockSession({
   const [articleText, setArticleText] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Numerical only: switch between the timed mock and the untimed step-by-step
+  // learn mode. Learn mode is off by default (timed practice is the priority).
+  const [learnMode, setLearnMode] = useState(false);
 
   async function generate() {
     setLoading(true);
@@ -112,10 +116,25 @@ export default function MockSession({
           />
         )}
 
+        {topic === "numerical" && (
+          <label className="mt-3 flex items-center gap-2 text-sm text-neutral-700">
+            <input
+              type="checkbox"
+              checked={learnMode}
+              onChange={(e) => setLearnMode(e.target.checked)}
+            />
+            Learn mode — untimed, reveal the calculation step by step (not scored)
+          </label>
+        )}
+
         {notice && <p className="mt-2 text-sm text-neutral-600">{notice}</p>}
       </div>
 
-      <MockRunner key={runKey} topic={topic} questions={questions} />
+      {topic === "numerical" && learnMode ? (
+        <NumericalLearn key={runKey} questions={questions} />
+      ) : (
+        <MockRunner key={runKey} topic={topic} questions={questions} />
+      )}
     </div>
   );
 }

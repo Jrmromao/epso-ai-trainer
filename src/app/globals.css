@@ -3,7 +3,12 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  /* The app is styled light-only (explicit Tailwind light classes throughout).
+     Declaring "light" makes native form controls (select/input) use the light
+     UA palette too, so they stay readable when the OS is in dark mode. Do NOT
+     set "light dark" here — it lets the browser paint controls dark while the
+     rest of the app is light, producing unreadable dark-on-dark selects. */
+  color-scheme: light;
 }
 
 body {

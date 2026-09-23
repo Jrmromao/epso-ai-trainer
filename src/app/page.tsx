@@ -17,7 +17,7 @@ const FIELD_TOPICS: Topic[] = [
   "policy",
 ];
 
-const REASONING_TOPICS: Topic[] = ["verbal", "numerical"];
+const REASONING_TOPICS: Topic[] = ["verbal", "verbal-rc", "numerical"];
 
 function countFor(topic: Topic): number {
   return SEED_QUESTIONS.filter((q) => q.topic === topic).length;

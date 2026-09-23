@@ -298,20 +298,108 @@ export const SEED_QUESTIONS: Question[] = [
       "The passage states it was a 'former independent state until its union ... in 1859'. Answer only from the passage.",
   },
 
-  // ---------------- NUMERICAL (seed — demonstrates workedSolution guardrail) ----------------
+  // ---------------- VERBAL — READING COMPREHENSION (seed) ----------------
+  // Real EPSO-format reference items (passage + "Which statement is correct?" +
+  // 4 full-sentence options). Explanations name each distractor's trap type —
+  // that naming IS the training signal for spotting them under time pressure.
+  {
+    id: "verbalrc-01",
+    topic: "verbal-rc",
+    stem:
+      "Genetic testing is a medical procedure that identifies changes or specific problems in genes and chromosomes. Most of the time, genetic testing is used to identify inherited illnesses such as haemophilia. The results of a genetic test can confirm or rule out a suspected condition or help determine a person's chance of developing or passing on a genetic illness. Several hundred genetic tests are currently in use and more are being developed. Because testing has both benefits and limitations, the decision about whether to be tested is voluntary. A counsellor can give advice and information about the testing, but many people still doubt its usefulness. They believe that genetic testing is associated only with the heredity of fatal conditions and, on that basis, do not want to know.\n\nWhich of the following statements is correct?",
+    choices: {
+      A: "Genetic testing is generally used on healthy people",
+      B: "Genetic testing can be used to establish the likelihood of someone developing certain illnesses in the future",
+      C: "Genetic testing is not very useful because it is voluntary",
+      D: "Several hundred genetic tests are carried out each year",
+    },
+    answer: "B",
+    explanation:
+      "B is the faithful paraphrase: the passage says testing can 'help determine a person's chance of developing or passing on a genetic illness'. A is OVERREACH — the passage says testing identifies inherited illnesses, not that it is used on healthy people. C is BELIEF-AS-FACT plus an UNSTATED CAUSAL LINK — 'many people still doubt' is a reported opinion, and the passage never links usefulness to being voluntary. D is a QUANTITY/FREQUENCY SWAP — the text says several hundred tests are 'currently in use', not 'carried out each year'.",
+  },
+  {
+    id: "verbalrc-02",
+    topic: "verbal-rc",
+    stem:
+      "The gambel oak is a small deciduous tree which typically grows at altitudes of 1 700 to 2 400 metres above sea level. Widespread in the foothills of the central south-western United States, it tends to grow where rainfall averages between 30 and 60 centimetres per year. Gambel oaks flourish on hillsides with thin, rocky, alkaline soil where other plant species are limited. They can survive in richer soils, but they face more competition for resources from other plants. Gambel oaks have adapted to wet springs and hot, dry summers - conditions which are also favourable to fires. However, even if badly burned, it can re-establish itself quickly from its roots below ground and handles drought conditions well.\n\nWhich of the following statements is correct?",
+    choices: {
+      A: "Gambel oaks flourish on hillsides where no other plants survive",
+      B: "Gambel oaks are common across the USA",
+      C: "Gambel oaks do better in environments where there is less competition from other plants",
+      D: "The gambel oak cannot be killed by either brush fire or drought",
+    },
+    answer: "C",
+    explanation:
+      "C is the faithful paraphrase: the passage says they flourish where 'other plant species are limited' and in richer soils 'face more competition' - so less competition suits them. A is OVERREACH — 'limited' other species is not 'no other plants survive'. B is a SCOPE SWAP — the passage says 'the central south-western United States', a specific region, not 'across the USA'. D is OVERREACH TO AN ABSOLUTE — the text says it 're-establishes itself quickly' after burning and 'handles drought well', which is resilience, not being impossible to kill.",
+  },
+
+  // ---------------- NUMERICAL (seed — real EPSO format: table + A-E) ----------------
+  // Data-table + calculation + 5 options (E = "None of the above"). A calculator
+  // is provided in the real test, so figures can be non-trivial. Each carries a
+  // worked solution and an ordered step breakdown for the untimed learn-mode.
   {
     id: "numerical-01",
     topic: "numerical",
-    stem: "Solar output rose from 138 to 149 GWh; population rose 1.1% over the same period. Approx. change in per-capita solar output?",
+    table: {
+      caption: "National solar generation",
+      headers: ["Year", "Output (GWh)", "Population (m)"],
+      rows: [
+        ["2000", "138", "10.0"],
+        ["2003", "149", "10.11"],
+      ],
+    },
+    stem:
+      "Solar output rose from 138 to 149 GWh while the population grew by 1.1% over the same period. Approximately what was the change in per-capita solar output?",
     choices: {
       A: "5.9%",
       B: "6.8%",
       C: "7.9%",
       D: "9.1%",
+      E: "None of the above",
     },
     answer: "B",
-    explanation: "Per-capita change ≈ output growth minus population growth.",
+    explanation:
+      "Per-capita change ≈ output growth minus population growth. Output grew ~7.97%, population 1.1%, so per-capita ≈ 6.8% (B). C (7.9%) is the trap of forgetting the population adjustment.",
     workedSolution:
       "Output growth = 149/138 − 1 ≈ 0.0797 = 7.97%. Per-capita ≈ 7.97% − 1.1% ≈ 6.87% ≈ 6.8% → B.",
+    steps: [
+      "Find the solar output growth: 149 / 138 = 1.0797.",
+      "Convert to a percentage change: 1.0797 − 1 = 0.0797 ≈ 7.97%.",
+      "Per-capita change ≈ output growth − population growth = 7.97% − 1.1%.",
+      "7.97% − 1.1% ≈ 6.87%, which rounds to 6.8% → answer B.",
+    ],
+  },
+  {
+    id: "numerical-02",
+    topic: "numerical",
+    table: {
+      caption: "R & D expenditure by country",
+      headers: ["Country", "GDP per head 2000 (€)", "R&D (% of GDP) 2000", "R&D (% of GDP) 2003"],
+      rows: [
+        ["Belgium", "19 330", "1.97", "1.89"],
+        ["Finland", "21 582", "3.34", "3.43"],
+        ["France", "18 874", "2.15", "2.17"],
+      ],
+    },
+    stem:
+      "If Belgium's GDP per head increased by 3% between 2000 and 2003, and R&D spending is the stated percentage of GDP, by approximately how much did Belgium's per-head R&D spend change over the period?",
+    choices: {
+      A: "It fell by about 1.2%",
+      B: "It rose by about 1.2%",
+      C: "It rose by about 3.0%",
+      D: "It fell by about 4.1%",
+      E: "None of the above",
+    },
+    answer: "A",
+    explanation:
+      "Per-head R&D = GDP per head × R&D%. 2000: 19330 × 1.97% = 380.8. 2003: (19330 × 1.03) × 1.89% = 19910 × 1.89% = 376.3. Change = 376.3/380.8 − 1 ≈ −1.2%, a small fall (A). The R&D-share drop (1.97→1.89) outweighs the 3% GDP rise.",
+    workedSolution:
+      "2000 per-head R&D = 19330 × 0.0197 = 380.8. 2003 GDP/head = 19330 × 1.03 = 19910. 2003 per-head R&D = 19910 × 0.0189 = 376.3. Change = 376.3/380.8 − 1 ≈ −0.0118 ≈ −1.2% → A.",
+    steps: [
+      "2000 per-head R&D = 19330 × 1.97% = 19330 × 0.0197 = 380.8 €.",
+      "2003 GDP per head = 19330 × 1.03 = 19910 €.",
+      "2003 per-head R&D = 19910 × 1.89% = 19910 × 0.0189 = 376.3 €.",
+      "Change = 376.3 / 380.8 − 1 ≈ −0.0118 = −1.2% → a fall of about 1.2%, answer A.",
+    ],
   },
 ];

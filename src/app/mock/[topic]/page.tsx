@@ -11,6 +11,7 @@ const VALID_TOPICS = new Set<Topic>([
   "trustworthy-ai",
   "policy",
   "verbal",
+  "verbal-rc",
   "numerical",
 ]);
 
