@@ -60,13 +60,15 @@ export default function ExamRunner({
 
   const finish = useCallback(() => {
     const recs: AnswerRecord[] = questions.map((q, i) => {
-      const chosen = answers[i] ?? "A";
+      // undefined = never answered (skipped). Represent as null, NOT a fake "A":
+      // a skip must be distinguishable from a real wrong answer.
+      const chosen = answers[i] ?? null;
       return {
         questionId: q.id,
         topic: q.topic,
         chosen,
         correct: q.answer,
-        isCorrect: chosen === q.answer && answers[i] !== undefined,
+        isCorrect: chosen === q.answer,
       };
     });
     setRecords(recs);
@@ -147,24 +149,28 @@ export default function ExamRunner({
         <div className="mt-3 space-y-4">
           {questions.map((q, i) => {
             const chosen = answers[i];
+            const skipped = chosen === undefined;
             const gotIt = chosen === q.answer;
+            const container = skipped
+              ? "border-blue-200 bg-blue-50"
+              : gotIt
+                ? "border-green-200 bg-green-50"
+                : "border-red-200 bg-red-50";
+            const badge = skipped
+              ? "bg-blue-600 text-white"
+              : gotIt
+                ? "bg-green-600 text-white"
+                : "bg-red-600 text-white";
             return (
-              <div
-                key={q.id}
-                className={`rounded-lg border p-4 ${
-                  gotIt ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"
-                }`}
-              >
+              <div key={q.id} className={`rounded-lg border p-4 ${container}`}>
                 <div className="flex items-start justify-between gap-3">
                   <p className="whitespace-pre-line text-sm font-medium">
                     {i + 1}. {q.stem}
                   </p>
                   <span
-                    className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${
-                      gotIt ? "bg-green-600 text-white" : "bg-red-600 text-white"
-                    }`}
+                    className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${badge}`}
                   >
-                    {gotIt ? "Correct" : chosen ? "Wrong" : "Skipped"}
+                    {skipped ? "Skipped" : gotIt ? "Correct" : "Wrong"}
                   </span>
                 </div>
 

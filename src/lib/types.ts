@@ -100,11 +100,14 @@ export function componentForTopic(topic: Topic): ExamComponent {
   return "field-ai";
 }
 
-// One answered item in a mock run.
+// One item in a mock run. `chosen` is null when the question was SKIPPED (never
+// answered) — distinct from a wrong answer. Skips count as not-correct for the
+// score but are EXCLUDED from the weak-area accuracy signal (see useProgress),
+// and rendered as a distinct "skipped" state in review.
 export interface AnswerRecord {
   questionId: string;
   topic: Topic;
-  chosen: ChoiceKey;
+  chosen: ChoiceKey | null;
   correct: ChoiceKey;
   isCorrect: boolean;
 }

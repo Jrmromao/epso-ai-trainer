@@ -45,6 +45,23 @@ export default function ProgressTools() {
     }
   }
 
+  async function resetProgress() {
+    if (
+      !window.confirm(
+        "Delete ALL recorded attempts from this browser? This clears the weak-area tracker and cannot be undone (saved test reviews are kept). Export first if unsure.",
+      )
+    ) {
+      return;
+    }
+    setNotice(null);
+    try {
+      await getProgressRepo().clear();
+      setNotice("Progress cleared. Reload to refresh the dashboard.");
+    } catch {
+      setNotice("Reset failed.");
+    }
+  }
+
   return (
     <div className="mt-4 rounded-lg border border-neutral-300 bg-white p-4 text-sm">
       <p className="font-semibold text-neutral-800">Backup your progress</p>
@@ -64,6 +81,12 @@ export default function ProgressTools() {
           className="rounded border border-neutral-300 px-3 py-1"
         >
           Import
+        </button>
+        <button
+          onClick={resetProgress}
+          className="rounded border border-red-300 px-3 py-1 text-red-600 hover:bg-red-50"
+        >
+          Reset progress
         </button>
         <input
           ref={fileRef}

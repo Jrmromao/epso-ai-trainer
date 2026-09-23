@@ -22,12 +22,15 @@ function fmtDate(ms: number): string {
 
 function ReviewQuestion({ item }: { item: ReviewItem }) {
   const q: Question = item.question;
+  const skipped = item.chosen === null;
+  // Three states: skipped (blue, never answered), correct (green), wrong (red).
+  const container = skipped
+    ? "border-blue-200 bg-blue-50"
+    : item.correct
+      ? "border-green-200 bg-green-50"
+      : "border-red-200 bg-red-50";
   return (
-    <div
-      className={`rounded-lg border p-4 ${
-        item.correct ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"
-      }`}
-    >
+    <div className={`rounded-lg border p-4 ${container}`}>
       {q.table && <QuestionTableView table={q.table} />}
       <p className="mt-1 whitespace-pre-line text-sm font-medium">{q.stem}</p>
 
@@ -56,9 +59,9 @@ function ReviewQuestion({ item }: { item: ReviewItem }) {
         })}
       </ul>
 
-      {item.chosen === null && (
-        <p className="mt-1 text-xs font-medium text-neutral-500">
-          Left unanswered
+      {skipped && (
+        <p className="mt-1 text-xs font-semibold text-blue-700">
+          Skipped — you did not answer this question
         </p>
       )}
 

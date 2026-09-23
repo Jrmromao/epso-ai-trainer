@@ -48,13 +48,15 @@ export default function MockRunner({
   const submit = useCallback(
     (pick: ChoiceKey | null) => {
       if (revealed || !current) return;
-      const effective: ChoiceKey = pick ?? "A"; // timeout counts as an attempt
+      // pick === null means the timer ran out with nothing selected — a SKIP.
+      // Record it as null (excluded from the accuracy signal, shown as skipped),
+      // not a fake "A".
       const record: AnswerRecord = {
         questionId: current.id,
         topic: current.topic,
-        chosen: effective,
+        chosen: pick,
         correct: current.answer,
-        isCorrect: effective === current.answer,
+        isCorrect: pick === current.answer,
       };
       setChosen(pick);
       setRevealed(true);

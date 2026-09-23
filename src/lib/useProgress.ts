@@ -12,9 +12,14 @@ import { getProgressRepo } from "@/lib/storage/indexedDbProgressRepo";
 export function useProgress() {
   const recordRun = useCallback(
     (records: AnswerRecord[], componentOverride?: ExamComponent) => {
-      if (records.length === 0) return;
+      // Skipped questions (chosen === null) are NOT attempts — the candidate
+      // never answered. Excluding them keeps the weak-area accuracy signal
+      // honest: "didn't answer" must not count as "got it wrong". (Same reasoning
+      // as excluding migrated aggregate history from the signal.)
+      const attempted = records.filter((r) => r.chosen !== null);
+      if (attempted.length === 0) return;
       const now = Date.now();
-      const attempts = records.map((r) => ({
+      const attempts = attempted.map((r) => ({
         component: componentOverride ?? componentForTopic(r.topic),
         topic: (r.topic ?? null) as Topic | null,
         questionId: r.questionId,
