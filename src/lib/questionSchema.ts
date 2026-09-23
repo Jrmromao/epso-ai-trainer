@@ -139,6 +139,24 @@ const TOPIC_FOCUS: Partial<Record<Topic, string>> = {
     "Focus on EU AI governance, the GPAI ecosystem, societal impact, the AI Office's role, and AI policy/enforcement in an EU-institutional context.",
 };
 
+// Shared "distractor discipline" block injected into every generation prompt.
+// AI-written MCQs skew easy because the model makes the correct answer easy to
+// find. These rules attack the specific tells that let a test-wise candidate
+// eliminate options without knowing the material.
+const ANTI_TELL_RULES =
+  " HARD-DISTRACTOR RULES (critical — the questions must be genuinely difficult):" +
+  " (1) All options must be roughly the same LENGTH and specificity — never make" +
+  " the correct answer the longest or most-qualified. (2) No option may be" +
+  " eliminable by absolute language — avoid 'always', 'never', 'all', 'none'," +
+  " 'only' unless every option uses similar wording. (3) Every distractor must be" +
+  " PLAUSIBLE to a knowledgeable candidate: use true-but-irrelevant statements," +
+  " correct-but-incomplete answers, or answers that are subtly wrong on ONE detail" +
+  " (a date, threshold, scope, article number, or direction). (4) No throwaway or" +
+  " absurd options, no joke answers, no 'all of the above'. (5) Distinguishing the" +
+  " correct answer should require real reasoning or precise knowledge, not surface" +
+  " cues. Aim for the difficulty of the actual EPSO test, where all four options" +
+  " look defensible at first glance.";
+
 // Prompt builders — tuned for AD8-level EPSO field-MCQ realism.
 export function buildGenerationPrompt(
   topic: Topic,
@@ -179,6 +197,7 @@ export function buildGenerationPrompt(
     '{"questions":[{"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string},' +
     '"answer":"A"|"B"|"C"|"D","explanation":string' +
     "}]}. No prose outside the JSON." +
+    ANTI_TELL_RULES +
     verbalNote;
 
   const focus = TOPIC_FOCUS[topic] ? ` ${TOPIC_FOCUS[topic]}` : "";
@@ -234,7 +253,8 @@ function buildReadingComprehensionPrompt(count: number): {
     "Output ONLY a JSON object of the form " +
     '{"questions":[{"stem":string,"choices":{"A":string,"B":string,"C":string,' +
     '"D":string},"answer":"A"|"B"|"C"|"D","explanation":string}]}. ' +
-    "The stem MUST contain the passage AND the question line. No prose outside the JSON.";
+    "The stem MUST contain the passage AND the question line. No prose outside the JSON." +
+    ANTI_TELL_RULES;
 
   const user =
     `Generate ${count} EPSO verbal reasoning reading-comprehension questions. ` +
@@ -275,13 +295,59 @@ function buildNumericalPrompt(count: number): { system: string; user: string } {
     '{"questions":[{"table":{"caption":string,"headers":string[],"rows":string[][]},' +
     '"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string,"E":string},' +
     '"answer":"A"|"B"|"C"|"D"|"E","explanation":string,"workedSolution":string,' +
-    '"steps":string[]}]}. No prose outside the JSON.';
+    '"steps":string[]}]}. No prose outside the JSON.' +
+    ANTI_TELL_RULES;
 
   const user =
     `Generate ${count} EPSO numerical reasoning questions, each based on its own ` +
     "data table. Vary the scenarios (economics, demographics, R&D, energy, " +
     "transport). Randomise which option letter is correct, and make E (\"None of " +
     "the above\") the correct answer for at least one question when appropriate.";
+
+  return { system, user };
+}
+
+// Lever 2 — self-critique / hardening pass. Takes the first-pass questions and
+// asks the model to re-examine each one against the hard-distractor rules and
+// rewrite weak options. The caller re-validates the output and falls back to
+// the first pass if the critique degrades it, so this can only improve quality.
+export function buildCritiquePrompt(
+  topic: Topic,
+  questionsJson: string,
+): { system: string; user: string } {
+  const preserve =
+    topic === "numerical"
+      ? " Preserve every field exactly (table, workedSolution, steps, the five" +
+        " options A-E including E). Keep the same JSON schema the input uses." +
+        " Distractors must be results of plausible calculation mistakes, close" +
+        " enough to the correct value to be tempting."
+      : topic === "verbal-rc"
+        ? " Preserve the passage + question line in the stem and the four options." +
+          " Keep each distractor a genuine trap (overreach, scope swap," +
+          " belief-as-fact, unstated causal, negation) that closely mirrors the" +
+          " passage wording — not an obvious mismatch."
+        : " Keep the same JSON schema the input uses.";
+
+  const system =
+    "You are a strict EPSO exam reviewer. You receive draft multiple-choice " +
+    "questions and make them HARDER and fairer without changing which answer is " +
+    "correct. For each question: identify any option a test-wise candidate could " +
+    "eliminate WITHOUT knowing the material (too short/long, absolute language " +
+    "like always/never/all, obviously absurd, or plainly off-topic) and REWRITE " +
+    "that option to be genuinely plausible — true-but-irrelevant, " +
+    "correct-but-incomplete, or subtly wrong on one detail. Equalise option " +
+    "length and specificity. Do NOT change the correct answer key. Keep exactly " +
+    "one correct option. Improve the explanation to justify the answer and name " +
+    "why each distractor is wrong." +
+    preserve +
+    " Output ONLY the revised JSON in the same shape as the input " +
+    '({"questions":[...]}), no prose.' +
+    ANTI_TELL_RULES;
+
+  const user =
+    "Harden these draft questions. Return the same number of questions in the " +
+    "same JSON schema:\n\n" +
+    questionsJson;
 
   return { system, user };
 }

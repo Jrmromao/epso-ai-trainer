@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Question, Topic } from "@/lib/types";
 import { chatJson, getLlmConfig } from "@/lib/llm";
 import { buildGenerationPrompt, parseQuestions } from "@/lib/questionSchema";
+import { hardenQuestions } from "@/lib/hardenQuestions";
 import { SEED_QUESTIONS } from "@/data/questions";
 import { hasValidSession } from "@/lib/auth";
 import { tryConsumeLlmCall } from "@/lib/rateLimit";
@@ -34,7 +35,13 @@ function shuffle<T>(arr: T[]): T[] {
 
 // Generate one topic batch. In BYOK mode the user's key funds the call and the
 // server daily cap is not consumed; in server mode the cap gates every call.
-async function generateForTopic(topic: Topic, byokKey: string): Promise<Question[]> {
+// When harden is set, a second (critique) pass hardens the batch's distractors;
+// it consumes another cap slot in server mode and safely no-ops on failure.
+async function generateForTopic(
+  topic: Topic,
+  byokKey: string,
+  harden: boolean,
+): Promise<Question[]> {
   const byok = byokKey.length > 0;
   if (!byok && !tryConsumeLlmCall()) return [];
   const { system, user } = buildGenerationPrompt(topic, PER_TOPIC);
@@ -46,7 +53,12 @@ async function generateForTopic(topic: Topic, byokKey: string): Promise<Question
       ],
       getLlmConfig(byokKey || undefined),
     );
-    return parseQuestions(raw, topic);
+    const questions = parseQuestions(raw, topic);
+    if (questions.length === 0) return [];
+    if (harden && (byok || tryConsumeLlmCall())) {
+      return hardenQuestions(questions, topic, getLlmConfig(byokKey || undefined));
+    }
+    return questions;
   } catch {
     return [];
   }
@@ -72,9 +84,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // Lever 2 hardening pass is on by default; callers may opt out for speed.
+  let harden = true;
+  try {
+    const body = (await req.json()) as { harden?: boolean };
+    harden = body?.harden !== false;
+  } catch {
+    // no body / not JSON -> keep default (harden on)
+  }
+
   // Generate all topic batches in parallel.
   const batches = await Promise.all(
-    FIELD_TOPICS.map((t) => generateForTopic(t, byokKey)),
+    FIELD_TOPICS.map((t) => generateForTopic(t, byokKey, harden)),
   );
   const generated = batches.flat();
 

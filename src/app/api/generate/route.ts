@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Topic } from "@/lib/types";
 import { chatJson, getLlmConfig } from "@/lib/llm";
 import { buildGenerationPrompt, parseQuestions } from "@/lib/questionSchema";
+import { hardenQuestions } from "@/lib/hardenQuestions";
 import { SEED_QUESTIONS } from "@/data/questions";
 import { hasValidSession } from "@/lib/auth";
 import { tryConsumeLlmCall } from "@/lib/rateLimit";
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { topic?: string; count?: number; articleText?: string };
+  let body: { topic?: string; count?: number; articleText?: string; harden?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -43,6 +44,8 @@ export async function POST(req: Request) {
 
   const topic = body.topic as Topic;
   const count = Math.min(Math.max(Number(body.count) || 5, 1), 10);
+  // Lever 2 hardening pass is on by default; callers may opt out for speed.
+  const harden = body.harden !== false;
 
   if (!VALID_TOPICS.has(topic)) {
     return NextResponse.json({ error: "unknown topic" }, { status: 400 });
@@ -79,7 +82,22 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json({ questions, source: "llm" });
+    // Lever 2: optional self-critique pass to harden distractors. It is a second
+    // LLM call, so in server mode it consumes another cap slot; if the cap is
+    // exhausted (or BYOK is off) we simply skip it and return the first pass.
+    // hardenQuestions never returns fewer questions than it was given.
+    let finalQuestions = questions;
+    let hardened = false;
+    if (harden && (byok || tryConsumeLlmCall())) {
+      finalQuestions = await hardenQuestions(
+        questions,
+        topic,
+        getLlmConfig(byokKey || undefined),
+      );
+      hardened = finalQuestions !== questions;
+    }
+
+    return NextResponse.json({ questions: finalQuestions, source: "llm", hardened });
   } catch (err) {
     const message = err instanceof Error ? err.message : "generation failed";
     return NextResponse.json({

@@ -23,6 +23,9 @@ export default function MockSession({
   const [articleText, setArticleText] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Lever 2: harder questions via a self-critique pass. On by default; can be
+  // turned off for faster generation.
+  const [harden, setHarden] = useState(true);
   // Numerical only: switch between the timed mock and the untimed step-by-step
   // learn mode. Learn mode is off by default (timed practice is the priority).
   const [learnMode, setLearnMode] = useState(false);
@@ -37,6 +40,7 @@ export default function MockSession({
         body: JSON.stringify({
           topic,
           count,
+          harden,
           articleText: articleText.trim() || undefined,
         }),
       });
@@ -50,6 +54,7 @@ export default function MockSession({
         questions?: Question[];
         source?: string;
         reason?: string;
+        hardened?: boolean;
       };
       if (data.questions && data.questions.length > 0) {
         setQuestions(data.questions);
@@ -57,7 +62,9 @@ export default function MockSession({
         setNotice(
           data.source === "fallback"
             ? `Showing seeded questions (${data.reason ?? "LLM unavailable"}).`
-            : `Generated ${data.questions.length} fresh questions.`,
+            : `Generated ${data.questions.length} fresh questions${
+                data.hardened ? " (hardened)" : ""
+              }.`,
         );
       } else {
         setNotice("No questions returned.");
@@ -105,6 +112,16 @@ export default function MockSession({
             Use seeded bank
           </button>
         </div>
+
+        <label className="mt-3 flex items-center gap-2 text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            checked={harden}
+            onChange={(e) => setHarden(e.target.checked)}
+          />
+          Harder questions — extra self-critique pass to remove easy distractors
+          (slower)
+        </label>
 
         {(topic === "ai-act" || topic === "policy") && (
           <textarea
