@@ -17,6 +17,7 @@ import { useTestReview } from "@/lib/useTestReview";
 import { llmHeaders } from "@/lib/userKey";
 import Calculator from "@/components/Calculator";
 import QuestionTableView from "@/components/QuestionTableView";
+import QuestionChartView from "@/components/QuestionChartView";
 
 const SECONDS_PER_QUESTION = 80; // field MCQ default — overridden per topic below
 
@@ -252,6 +253,7 @@ export default function MockRunner({
       </div>
 
       {current.table && <QuestionTableView table={current.table} />}
+      {current.chart && <QuestionChartView chart={current.chart} />}
       <div className="mt-3 flex items-center gap-2">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${badge.cls}`}>
           {badge.label}

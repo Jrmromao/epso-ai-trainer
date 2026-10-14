@@ -3,6 +3,7 @@ import {
   type Choices,
   type Difficulty,
   type Question,
+  type QuestionChart,
   type QuestionLanguage,
   type QuestionTable,
   type Topic,
@@ -35,6 +36,35 @@ function parseTable(raw: unknown): QuestionTable | undefined {
   if (rows.length === 0) return undefined;
   const caption = typeof t.caption === "string" && t.caption.trim() ? t.caption.trim() : undefined;
   return { headers, rows, ...(caption ? { caption } : {}) };
+}
+
+// Parse an optional chart. Defensive: any malformed shape returns undefined so
+// the question survives without a chart rather than being rejected.
+function parseChart(raw: unknown): QuestionChart | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const c = raw as Record<string, unknown>;
+  const type = c.type === "bar" || c.type === "line" ? c.type : undefined;
+  if (!type) return undefined;
+  if (!Array.isArray(c.categories) || !Array.isArray(c.series)) return undefined;
+  const categories = c.categories.filter((x): x is string => typeof x === "string");
+  if (categories.length === 0) return undefined;
+  const series: { name: string; values: number[] }[] = [];
+  for (const s of c.series) {
+    if (typeof s !== "object" || s === null) continue;
+    const so = s as Record<string, unknown>;
+    const name = typeof so.name === "string" ? so.name : "";
+    if (!Array.isArray(so.values)) continue;
+    const values = so.values
+      .map((v) => (typeof v === "number" ? v : Number(v)))
+      .filter((v) => Number.isFinite(v));
+    // Each series must align with the category count.
+    if (values.length !== categories.length) continue;
+    series.push({ name, values });
+  }
+  if (series.length === 0) return undefined;
+  const caption = typeof c.caption === "string" && c.caption.trim() ? c.caption.trim() : undefined;
+  const yAxisLabel = typeof c.yAxisLabel === "string" && c.yAxisLabel.trim() ? c.yAxisLabel.trim() : undefined;
+  return { type, categories, series, ...(caption ? { caption } : {}), ...(yAxisLabel ? { yAxisLabel } : {}) };
 }
 
 const VALID_DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
@@ -100,6 +130,7 @@ export function validateQuestion(raw: unknown, topic: Topic, difficulty: Difficu
     language: parseLanguage(q.language, language),
     stem: q.stem.trim(),
     ...(parseTable(q.table) ? { table: parseTable(q.table) } : {}),
+    ...(parseChart(q.chart) ? { chart: parseChart(q.chart) } : {}),
     choices: builtChoices,
     answer: q.answer,
     explanation: q.explanation.trim(),
@@ -406,17 +437,23 @@ function buildNumericalPrompt(count: number, difficulty: Difficulty = "medium", 
   const optionE = language === "pt-PT" ? "Impossível responder" : "Cannot be determined";
 
   const tableNote =
-    "TABLE DESIGN (critical — match real EPSO format): Use realistic, multi-column " +
-    "tables modelled on EU statistical publications (Eurostat, OECD). " +
-    "The table should have 4-7 columns and 3-6 rows. Include a mix of column types: " +
-    "at least one year-pair (e.g. 2000 / 2003), one percentage column, one absolute " +
-    "value column (millions EUR, thousands of people, GWh, etc.), and optionally a " +
-    "per-capita or ratio column. Country/region names or sector names as row labels. " +
-    "NOT every value needs to be used — include decoy columns that distract. " +
-    "The question should require the candidate to DERIVE a value (ratio, compound " +
-    "growth, share of total, per-capita from total + population) rather than just " +
-    "read a cell directly. At least one question per batch should have E as the " +
-    "correct answer because the exact result does not match any of A-D.";
+    "DATA PRESENTATION (critical — match real EPSO format): Present the data as " +
+    "EITHER a \"table\" OR a \"chart\" (not both). Vary the format across the batch " +
+    "so roughly one third use a chart.\n" +
+    "TABLE: realistic multi-column table modelled on EU statistical publications " +
+    "(Eurostat, OECD) with 4-7 columns and 3-6 rows. Mix column types: a year-pair " +
+    "(e.g. 2000 / 2003), a percentage column, an absolute-value column (millions " +
+    "EUR, thousands of people, GWh), optionally a per-capita column. Row labels are " +
+    "countries/regions/sectors.\n" +
+    "CHART: a \"chart\" object {\"type\":\"bar\"|\"line\",\"caption\":string," +
+    "\"categories\":string[],\"series\":[{\"name\":string,\"values\":number[]}]," +
+    "\"yAxisLabel\":string}. Use \"bar\" for comparisons across categories, \"line\" " +
+    "for trends over time. Every series.values array MUST have the same length as " +
+    "categories. 1-3 series. Keep values readable (round-ish numbers).\n" +
+    "In BOTH cases: not every value needs to be used (include decoys), and the " +
+    "question should require DERIVING a value (ratio, compound growth, share of " +
+    "total, per-capita) rather than reading a single cell/bar directly. At least " +
+    "one question per batch should have E as the correct answer.";
 
   const system =
     "You are a senior EPSO test author writing NUMERICAL REASONING items for an " +
@@ -443,11 +480,12 @@ function buildNumericalPrompt(count: number, difficulty: Difficulty = "medium", 
     "answer — not random numbers.\n\n" +
     tableNote + "\n\n" +
     "Output ONLY a JSON object of the form " +
-    '{"questions":[{"table":{"caption":string,"headers":string[],"rows":string[][]},' +
+    '{"questions":[{"table"?:{"caption":string,"headers":string[],"rows":string[][]},' +
+    '"chart"?:{"type":"bar"|"line","caption":string,"categories":string[],"series":[{"name":string,"values":number[]}],"yAxisLabel":string},' +
     '"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string,"E":string},' +
     '"answer":"A"|"B"|"C"|"D"|"E","difficulty":"easy"|"medium"|"hard","language":string,' +
     '"explanation":string,"workedSolution":string,"steps":string[]}]}. ' +
-    "No prose outside the JSON." +
+    "Each question has EITHER table OR chart, never both. No prose outside the JSON." +
     difficultyNote +
     ANTI_TELL_RULES +
     languageNote;

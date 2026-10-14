@@ -517,9 +517,9 @@ export const SEED_QUESTIONS: Question[] = [
       D: "14,4%",
       E: "Impossível responder",
     },
-    answer: "B",
+    answer: "E",
     explanation:
-      "Total 2020 = 24 + 80 + 56 = 160 TWh. Total 2022 = 36 + 92 + 49 = 177 TWh. Variação = (177 − 160) / 160 = 17/160 ≈ 10,6%. Nenhuma das opções A–D corresponde exatamente; a resposta correta é E — Nenhuma das anteriores.",
+      "Total 2020 = 24 + 80 + 56 = 160 TWh. Total 2022 = 36 + 92 + 49 = 177 TWh. Variação = (177 − 160) / 160 = 17/160 ≈ 10,6%. Nenhuma das opções A–D corresponde exatamente a 10,6%; a resposta correta é E — Impossível responder (nenhum valor dado corresponde).",
     workedSolution:
       "Total 2020 = 24 + 80 + 56 = 160 TWh. Total 2022 = 36 + 92 + 49 = 177 TWh. Variação % = (177 − 160) / 160 × 100 = 17/160 × 100 ≈ 10,6%. Nenhuma das opções A–D corresponde → E.",
     steps: [
@@ -528,6 +528,44 @@ export const SEED_QUESTIONS: Question[] = [
       "Calcular a variação absoluta: 177 − 160 = 17 TWh.",
       "Calcular a variação percentual: 17 ÷ 160 × 100 ≈ 10,6%.",
       "10,6% não corresponde a nenhuma das opções A–D → resposta E.",
+    ],
+  },
+
+  // Numérico com GRÁFICO — pt-PT
+  {
+    id: "numerical-chart-ptpt-01",
+    topic: "numerical",
+    difficulty: "medium",
+    language: "pt-PT",
+    chart: {
+      type: "bar",
+      caption: "Número de passageiros por aeroporto (milhões)",
+      yAxisLabel: "Passageiros (milhões)",
+      categories: ["Lisboa", "Porto", "Faro", "Funchal"],
+      series: [
+        { name: "2019", values: [31, 13, 9, 4] },
+        { name: "2023", values: [35, 16, 10, 5] },
+      ],
+    },
+    stem:
+      "Qual foi o aumento percentual do número de passageiros no aeroporto do Porto entre 2019 e 2023?",
+    choices: {
+      A: "18,8%",
+      B: "23,1%",
+      C: "30,0%",
+      D: "16,0%",
+      E: "Impossível responder",
+    },
+    answer: "B",
+    explanation:
+      "Porto passou de 13 para 16 milhões. Aumento = (16 − 13) / 13 = 3/13 ≈ 0,2308 ≈ 23,1% (B). D (16,0%) é a armadilha de dividir pelo valor final (3/16) em vez do inicial.",
+    workedSolution:
+      "Aumento = (16 − 13) / 13 × 100 = 3 / 13 × 100 ≈ 23,08% ≈ 23,1% → B.",
+    steps: [
+      "Ler os valores do Porto no gráfico: 2019 = 13, 2023 = 16 milhões.",
+      "Calcular o aumento absoluto: 16 − 13 = 3 milhões.",
+      "Dividir pelo valor inicial (2019): 3 ÷ 13 ≈ 0,2308.",
+      "Converter em percentagem: 0,2308 × 100 ≈ 23,1% → resposta B.",
     ],
   },
 ];

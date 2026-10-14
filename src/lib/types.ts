@@ -48,6 +48,18 @@ export interface QuestionTable {
   rows: string[][];
 }
 
+// A chart shown above the stem — the other common EPSO numerical format.
+// Rendered as inline SVG (bar or line). `series` holds one or more data series;
+// `categories` are the x-axis labels (years, countries, etc.). Every series
+// `values` array must have the same length as `categories`.
+export interface QuestionChart {
+  type: "bar" | "line";
+  caption?: string;
+  categories: string[]; // x-axis labels
+  series: { name: string; values: number[] }[];
+  yAxisLabel?: string;
+}
+
 // Difficulty levels modelled on what distinguishes EPSO question grades:
 // easy   — correct answer is clearly the best option; distractors are implausible
 //          or contain obvious absolute language.
@@ -76,6 +88,7 @@ export interface BaseQuestion {
   language: QuestionLanguage;
   stem: string; // the question / passage prompt
   table?: QuestionTable; // optional data table (numerical reasoning)
+  chart?: QuestionChart; // optional chart (numerical reasoning)
   choices: Choices;
   answer: ChoiceKey;
   explanation: string; // why the answer is correct (and pitfalls)
