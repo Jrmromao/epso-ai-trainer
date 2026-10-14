@@ -11,7 +11,7 @@ import AbstractPanel from "@/components/AbstractPanel";
 // Abstract reasoning practice runner. Fully deterministic — no LLM, no network.
 // Real EPSO abstract timing is ~50-60s per question; we use 55s.
 
-const SECONDS_PER_Q = 55;
+const SECONDS_PER_Q = 60; // real EPSO: 10 questions / 10 minutes
 const OPTION_LETTERS = ["A", "B", "C", "D", "E"];
 
 const DIFFICULTY_BADGE: Record<AbstractDifficulty, { label: string; cls: string }> = {

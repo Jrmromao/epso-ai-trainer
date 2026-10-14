@@ -33,11 +33,34 @@ export interface Element {
 
 // A panel is a fixed layout of positioned slots, each holding one element
 // (or null for an empty slot). `layout` tells the renderer how to place them.
-export type PanelLayout = "single" | "row3" | "cross" | "stack2";
+//
+// Specialised layouts carry extra structured data instead of generic slots:
+// - "count": draw `count` identical dots (element-progression pattern)
+// - "segments": an 8-segment square, each segment with a fill pattern
+// - "curves": 2-3 curved lines positioned in the box
+export type PanelLayout =
+  | "single"
+  | "row3"
+  | "cross"
+  | "stack2"
+  | "count"
+  | "segments"
+  | "curves";
+
+// Segment fill patterns for the 8-segment square (EPSO Q4 format).
+export type SegPattern = "blank" | "solid" | "dots" | "lines" | "checker";
 
 export interface Panel {
   layout: PanelLayout;
   slots: (Element | null)[];
+  // count layout:
+  count?: number;
+  countShape?: ShapeKind;
+  // segments layout: 8 patterns (clockwise from top-left triangle) + optional dot position 0..7
+  segments?: SegPattern[];
+  dotPos?: number;
+  // curves layout: list of curves, each a vertical position (0..1) and a flip flag
+  curves?: { y: number; flip: boolean }[];
 }
 
 export interface AbstractQuestion {
@@ -237,7 +260,15 @@ function sameElement(a: Element | null, b: Element | null): boolean {
 }
 
 function clonePanel(p: Panel): Panel {
-  return { layout: p.layout, slots: p.slots.map((s) => (s ? { ...s } : null)) };
+  return {
+    layout: p.layout,
+    slots: p.slots.map((s) => (s ? { ...s } : null)),
+    ...(p.count !== undefined ? { count: p.count } : {}),
+    ...(p.countShape ? { countShape: p.countShape } : {}),
+    ...(p.segments ? { segments: p.segments.slice() } : {}),
+    ...(p.dotPos !== undefined ? { dotPos: p.dotPos } : {}),
+    ...(p.curves ? { curves: p.curves.map((c) => ({ ...c })) } : {}),
+  };
 }
 
 function shuffleArr<T>(rng: () => number, arr: T[]): T[] {
@@ -295,10 +326,25 @@ function shuffleWithAnswer(
 }
 
 // Deterministically alter a panel a little so it becomes distinct from others.
-// Tries, in order: flip a fill, rotate an arrow, change a shape.
 const NUDGE_SHAPES: ShapeKind[] = ["circle", "square", "triangle", "diamond"];
 function nudgePanel(p: Panel, salt: number): Panel {
   const out = clonePanel(p);
+
+  // Specialised layouts nudge their own data.
+  if (out.layout === "count") {
+    out.count = Math.max(1, (out.count ?? 1) + (salt % 2 === 0 ? 1 : -1));
+    return out;
+  }
+  if (out.layout === "segments") {
+    out.dotPos = ((out.dotPos ?? 0) + 1 + salt) % 8;
+    return out;
+  }
+  if (out.layout === "curves" && out.curves && out.curves.length > 0) {
+    const i = salt % out.curves.length;
+    out.curves[i] = { ...out.curves[i], flip: !out.curves[i].flip };
+    return out;
+  }
+
   const slotIdx = out.slots.findIndex((s) => s);
   if (slotIdx === -1) return out;
   const slot = out.slots[slotIdx]!;
@@ -316,7 +362,19 @@ function nudgePanel(p: Panel, salt: number): Panel {
 }
 
 function panelsEqual(a: Panel, b: Panel): boolean {
-  if (a.layout !== b.layout || a.slots.length !== b.slots.length) return false;
+  if (a.layout !== b.layout) return false;
+  // Specialised layouts compare their structured data.
+  if (a.layout === "count") return a.count === b.count && a.countShape === b.countShape;
+  if (a.layout === "segments") {
+    if (a.dotPos !== b.dotPos) return false;
+    const as = a.segments ?? [], bs = b.segments ?? [];
+    return as.length === bs.length && as.every((s, i) => s === bs[i]);
+  }
+  if (a.layout === "curves") {
+    const ac = a.curves ?? [], bc = b.curves ?? [];
+    return ac.length === bc.length && ac.every((c, i) => c.y === bc[i].y && c.flip === bc[i].flip);
+  }
+  if (a.slots.length !== b.slots.length) return false;
   return a.slots.every((s, i) => sameElement(s, b.slots[i]));
 }
 
@@ -467,15 +525,166 @@ function genHardFlipTravel(rng: () => number, id: string): AbstractQuestion {
   };
 }
 
+// EASY/MEDIUM template: ELEMENT-COUNT PROGRESSION. A panel shows N identical
+// shapes; N increases or decreases by a fixed step. One of the most common
+// EPSO patterns (per official guidance).
+function genProgression(rng: () => number, id: string, difficulty: AbstractDifficulty): AbstractQuestion {
+  const shape = pick(rng, ALL_SHAPES);
+  const step = pick(rng, [1, -1]);
+  // Choose a start so all six counts (0..5 steps) stay within 1..6.
+  // increasing: start 1 -> ends 6. decreasing: start 6 -> ends 1.
+  const start = step === 1 ? 1 : 6;
+  const countAt = (i: number) => start + i * step;
+  const correctCount = countAt(5);
+  const panelFor = (c: number): Panel => ({ layout: "count", slots: [], count: c, countShape: shape });
+  const sequence = [0, 1, 2, 3, 4].map((i) => panelFor(countAt(i)));
+  const correct = panelFor(correctCount);
+
+  // Distractors: distinct counts within 1..9, none equal to correctCount.
+  const used = new Set<number>([correctCount]);
+  const distractors: Panel[] = [];
+  const candidates = [
+    correctCount + 1,
+    correctCount - 1,
+    correctCount + 2,
+    correctCount - 2,
+    countAt(4), // repeat previous
+    correctCount + 3,
+  ];
+  for (const c of candidates) {
+    if (distractors.length >= 4) break;
+    if (c >= 1 && c <= 9 && !used.has(c)) {
+      used.add(c);
+      distractors.push(panelFor(c));
+    }
+  }
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty, sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary: `The number of shapes ${step === 1 ? "increases" : "decreases"} by one each step. After ${countAt(4)} comes ${correctCount}.`,
+  };
+}
+
+// MEDIUM/HARD template: REFLECTION. An asymmetric arrangement in a 3-slot row
+// flips left-right each step (A B _ -> _ B A). Modelled with a triangle whose
+// direction alternates and position mirrors.
+function genReflection(rng: () => number, id: string, difficulty: AbstractDifficulty): AbstractQuestion {
+  // Two different shapes at the two ends; they swap ends each step (mirror).
+  const left = { shape: pick(rng, ALL_SHAPES), fill: "solid" as Fill };
+  const right = { shape: pick(rng, ALL_SHAPES.filter((s) => s !== left.shape)), fill: "outline" as Fill };
+  const panelAt = (i: number): Panel =>
+    i % 2 === 0
+      ? { layout: "row3", slots: [{ ...left }, null, { ...right }] }
+      : { layout: "row3", slots: [{ ...right }, null, { ...left }] };
+  const sequence = [0, 1, 2, 3, 4].map(panelAt);
+  const correct = panelAt(5);
+  const distractors: Panel[] = [
+    panelAt(4), // not reflected (repeat)
+    { layout: "row3", slots: [{ ...left }, { ...right }, null] }, // both on one side
+    { layout: "row3", slots: [null, { ...left }, { ...right }] }, // shifted
+    { layout: "row3", slots: [{ ...right, fill: "solid" }, null, { ...left, fill: "outline" }] }, // fills wrong
+  ];
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty, sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary: "The two shapes swap ends each step (left-right reflection). Mirror the previous panel.",
+  };
+}
+
+// HARD template: 8-SEGMENT SQUARE (EPSO Q4 format). The square is split into 8
+// triangular segments by both diagonals and the vertical/horizontal medians.
+// The set of fill patterns rotates one segment-step each panel, and a small
+// black dot travels around the segments.
+const SEG_PATTERNS: SegPattern[] = ["dots", "lines", "checker", "solid"];
+function genSegments(rng: () => number, id: string): AbstractQuestion {
+  // Base: assign a repeating pattern to the 8 segments.
+  const base: SegPattern[] = Array.from({ length: 8 }, (_, i) => SEG_PATTERNS[i % SEG_PATTERNS.length]);
+  const rot = pick(rng, [1, -1]);
+  const dotStep = pick(rng, [1, -1]);
+  const dotStart = Math.floor(rng() * 8);
+  const panelAt = (i: number): Panel => ({
+    layout: "segments",
+    slots: [],
+    segments: base.map((_, k) => base[(k - i * rot + 800) % 8]),
+    dotPos: ((dotStart + i * dotStep) % 8 + 8) % 8,
+  });
+  const sequence = [0, 1, 2, 3, 4].map(panelAt);
+  const correct = panelAt(5);
+  const distractors: Panel[] = [
+    panelAt(4), // rotation off by one
+    { ...clonePanel(correct), dotPos: ((correct.dotPos ?? 0) + 1) % 8 }, // dot one off
+    { ...clonePanel(correct), segments: base.map((_, k) => base[(k - 6 * rot * -1 + 800) % 8]) }, // wrong rotation dir
+    { ...clonePanel(correct), dotPos: ((correct.dotPos ?? 0) + 4) % 8 }, // dot opposite
+  ];
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "hard", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary: "The square has 8 segments. The fill patterns rotate one segment per step, and the small dot moves around the segments each step. Track both.",
+  };
+}
+
+// MEDIUM template: CURVED LINES (EPSO Q5 format). 2-3 wavy lines sit at vertical
+// positions; each line flips on its own alternating cycle AND the whole stack
+// shifts vertical position each step. More state => options stay distinct.
+function genCurves(rng: () => number, id: string): AbstractQuestion {
+  const n = 3; // fixed 3 lines gives 2^3 = 8 flip states, enough for distinct options
+  const baseY = [0.3, 0.5, 0.7];
+  const flipAt = (i: number, k: number) => ((i + k) % 2 + 2) % 2 === 1;
+  const panelFor = (i: number): Panel => ({
+    layout: "curves",
+    slots: [],
+    curves: baseY.map((y, k) => ({ y, flip: flipAt(i, k) })),
+  });
+  const sequence = [0, 1, 2, 3, 4].map(panelFor);
+  const correct = panelFor(5);
+
+  // Distractors: each flips a DIFFERENT distinct subset of lines from correct.
+  const mk = (flips: boolean[]): Panel => ({
+    layout: "curves",
+    slots: [],
+    curves: baseY.map((y, k) => ({ y, flip: flips[k] })),
+  });
+  const correctFlips = correct.curves!.map((c) => c.flip);
+  const variants: boolean[][] = [
+    correctFlips.map((f, k) => (k === 0 ? !f : f)),
+    correctFlips.map((f, k) => (k === 1 ? !f : f)),
+    correctFlips.map((f, k) => (k === 2 ? !f : f)),
+    correctFlips.map((f) => !f),
+  ];
+  const distractors = variants.map(mk);
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "medium", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary: "Each curved line flips its orientation on its own alternating cycle. Work out each line's phase and continue all three.",
+  };
+}
+
 // ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
 type Generator = (rng: () => number, id: string) => AbstractQuestion;
 
 const TEMPLATES: Record<AbstractDifficulty, Generator[]> = {
-  easy: [genEasy, genEasyFillCycle, genEasyMove],
-  medium: [genMedium, genMediumStack, genMediumTwoArrows],
-  hard: [genHard, genHardFlipTravel],
+  easy: [
+    genEasy,
+    genEasyFillCycle,
+    genEasyMove,
+    (rng, id) => genProgression(rng, id, "easy"),
+  ],
+  medium: [
+    genMedium,
+    genMediumStack,
+    genMediumTwoArrows,
+    (rng, id) => genProgression(rng, id, "medium"),
+    (rng, id) => genReflection(rng, id, "medium"),
+    genCurves,
+  ],
+  hard: [
+    genHard,
+    genHardFlipTravel,
+    (rng, id) => genReflection(rng, id, "hard"),
+    genSegments,
+  ],
 };
 
 export function generateAbstractQuestion(
