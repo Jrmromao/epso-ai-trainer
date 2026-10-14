@@ -27,7 +27,11 @@ export default function MockSession({
   const [harden, setHarden] = useState(true);
   const [learnMode, setLearnMode] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
-  const [language, setLanguage] = useState<QuestionLanguage>("en");
+  // Reasoning topics default to pt-PT (Language 1 in the real EPSO exam).
+  // Field MCQ stays English (Language 2).
+  const [language, setLanguage] = useState<QuestionLanguage>(
+    REASONING_TOPICS.has(topic) ? "pt-PT" : "en",
+  );
 
   const isReasoning = REASONING_TOPICS.has(topic);
 

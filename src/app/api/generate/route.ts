@@ -26,12 +26,23 @@ const VALID_LANGUAGES = new Set<QuestionLanguage>(["en", "pt-PT"]);
 // Field MCQ topics are always English (Language 2 in the real exam).
 const FIELD_TOPICS = new Set<Topic>(["ai-act", "ml-fundamentals", "genai-rag", "mlops", "trustworthy-ai", "policy"]);
 
-function fallback(topic: Topic, count: number, difficulty?: Difficulty) {
+function fallback(topic: Topic, count: number, difficulty?: Difficulty, language?: QuestionLanguage) {
+  // Try to match topic + difficulty + language.
   const filtered = SEED_QUESTIONS.filter(
-    (q) => q.topic === topic && (!difficulty || q.difficulty === difficulty),
+    (q) =>
+      q.topic === topic &&
+      (!difficulty || q.difficulty === difficulty) &&
+      (!language || q.language === language),
   );
-  // If no seed questions match the requested difficulty, fall back to any topic match.
-  return (filtered.length > 0 ? filtered : SEED_QUESTIONS.filter((q) => q.topic === topic)).slice(0, count);
+  // Relax difficulty if no match.
+  const byTopicAndLang = filtered.length > 0
+    ? filtered
+    : SEED_QUESTIONS.filter((q) => q.topic === topic && (!language || q.language === language));
+  // Relax language if still no match (better to show English than nothing).
+  const byTopic = byTopicAndLang.length > 0
+    ? byTopicAndLang
+    : SEED_QUESTIONS.filter((q) => q.topic === topic);
+  return byTopic.slice(0, count);
 }
 
 export async function POST(req: Request) {
@@ -70,7 +81,7 @@ export async function POST(req: Request) {
 
   if (!byok && !tryConsumeLlmCall()) {
     return NextResponse.json({
-      questions: fallback(topic, count, difficulty),
+      questions: fallback(topic, count, difficulty, language),
       source: "fallback",
       reason: "daily LLM limit reached",
     });
@@ -90,7 +101,7 @@ export async function POST(req: Request) {
 
     if (questions.length === 0) {
       return NextResponse.json({
-        questions: fallback(topic, count, difficulty),
+        questions: fallback(topic, count, difficulty, language),
         source: "fallback",
         reason: "LLM output failed validation",
       });
@@ -111,7 +122,7 @@ export async function POST(req: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "generation failed";
     return NextResponse.json({
-      questions: fallback(topic, count, difficulty),
+      questions: fallback(topic, count, difficulty, language),
       source: "fallback",
       reason: message,
     });
