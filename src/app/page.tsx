@@ -146,6 +146,15 @@ export default function Home() {
         {REASONING_TOPICS.map((t) => (
           <TopicCard key={t} topic={t} />
         ))}
+        <Link
+          href="/abstract"
+          className="block rounded-lg border border-neutral-300 bg-white p-4 transition hover:border-neutral-900 hover:shadow-sm"
+        >
+          <div className="font-semibold">Abstract Reasoning</div>
+          <div className="mt-1 text-sm text-neutral-500">
+            Pattern sequences · generated locally (no AI)
+          </div>
+        </Link>
       </div>
 
       <AccessGate />
