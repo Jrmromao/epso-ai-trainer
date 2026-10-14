@@ -18,7 +18,35 @@ import { llmHeaders } from "@/lib/userKey";
 import Calculator from "@/components/Calculator";
 import QuestionTableView from "@/components/QuestionTableView";
 
-const SECONDS_PER_QUESTION = 80;
+const SECONDS_PER_QUESTION = 80; // field MCQ default — overridden per topic below
+
+// Real EPSO timing per topic (total session seconds).
+// Verbal: 20Q / 35 min. Numerical: 10Q / 20 min. Field MCQ: 30Q / 40 min.
+// For mock sessions we scale proportionally to however many questions are loaded.
+const SESSION_SECONDS_PER_Q: Partial<Record<Topic, number>> = {
+  verbal:     105, // 35 min / 20 Q
+  "verbal-rc": 105,
+  numerical:  120, // 20 min / 10 Q
+};
+
+function sessionSecondsForTopic(topic: Topic, count: number): number {
+  const perQ = SESSION_SECONDS_PER_Q[topic] ?? SECONDS_PER_QUESTION;
+  return perQ * count;
+}
+
+function fmt(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function overallColor(sec: number, total: number): string {
+  const pct = sec / total;
+  if (pct <= 0.1) return "text-red-600";
+  if (pct <= 0.25) return "text-amber-600";
+  return "text-green-700";
+}
+
 const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D", "E"];
 
 // Difficulty badge — full static class strings so Tailwind doesn't purge them.
@@ -61,11 +89,15 @@ export default function MockRunner({
   topic: Topic;
   questions: Question[];
 }) {
+  const totalSessionSeconds = sessionSecondsForTopic(topic, questions.length);
+  const perQSeconds = SESSION_SECONDS_PER_Q[topic] ?? SECONDS_PER_QUESTION;
+
   const [index, setIndex] = useState(0);
   const [chosen, setChosen] = useState<ChoiceKey | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [records, setRecords] = useState<AnswerRecord[]>([]);
-  const [secondsLeft, setSecondsLeft] = useState(SECONDS_PER_QUESTION);
+  const [sessionLeft, setSessionLeft] = useState(totalSessionSeconds);
+  const [secondsLeft, setSecondsLeft] = useState(perQSeconds);
   const [finished, setFinished] = useState(false);
   const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
   const [assessing, setAssessing] = useState(false);
@@ -105,6 +137,18 @@ export default function MockRunner({
     [current, revealed],
   );
 
+  // Overall session countdown — hitting zero ends the session.
+  useEffect(() => {
+    if (finished) return;
+    if (sessionLeft <= 0) {
+      submit(chosen);
+      setFinished(true);
+      return;
+    }
+    const t = setTimeout(() => setSessionLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [sessionLeft, finished, submit, chosen]);
+
   // Per-question countdown; auto-submit on timeout.
   useEffect(() => {
     if (revealed || finished || !current) return;
@@ -118,7 +162,7 @@ export default function MockRunner({
     setIndex((i) => i + 1);
     setChosen(null);
     setRevealed(false);
-    setSecondsLeft(SECONDS_PER_QUESTION);
+    setSecondsLeft(perQSeconds);
   }
 
   // On finish: persist the run and request a weak-topic assessment.
@@ -188,21 +232,32 @@ export default function MockRunner({
 
   return (
     <div className="mt-6">
-      {/* Header: progress + difficulty badge + timer */}
-      <div className="flex items-center justify-between text-sm text-neutral-500">
-        <span>Question {index + 1} / {questions.length}</span>
-        <div className="flex items-center gap-2">
-          <span className={`rounded border px-2 py-0.5 text-xs font-medium ${badge.cls}`}>
-            {badge.label}
-          </span>
-          <span className={secondsLeft <= 10 ? "font-semibold text-red-600" : ""}>
+      {/* Session timer bar */}
+      <div className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3 text-sm">
+        <div>
+          <div className="text-xs text-neutral-500">Session</div>
+          <div className={`text-lg font-bold tabular-nums ${overallColor(sessionLeft, totalSessionSeconds)}`}>
+            {fmt(sessionLeft)}
+          </div>
+        </div>
+        <div className="text-center text-neutral-500">
+          Q {index + 1} / {questions.length}
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-neutral-500">This question</div>
+          <div className={`text-lg font-bold tabular-nums ${secondsLeft <= 10 ? "text-red-600" : secondsLeft <= perQSeconds * 0.25 ? "text-amber-600" : "text-green-700"}`}>
             {secondsLeft}s
-          </span>
+          </div>
         </div>
       </div>
 
       {current.table && <QuestionTableView table={current.table} />}
-      <p className="mt-3 whitespace-pre-line font-medium">{current.stem}</p>
+      <div className="mt-3 flex items-center gap-2">
+        <span className={`rounded px-2 py-0.5 text-xs font-medium ${badge.cls}`}>
+          {badge.label}
+        </span>
+      </div>
+      <p className="mt-2 whitespace-pre-line font-medium">{current.stem}</p>
 
       {topic === "numerical" && (
         <div className="mt-3">
