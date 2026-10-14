@@ -5,6 +5,7 @@ import {
   type AnswerRecord,
   type AssessmentResult,
   type ChoiceKey,
+  type Difficulty,
   type Question,
   type Topic,
   isNumerical,
@@ -17,9 +18,41 @@ import { llmHeaders } from "@/lib/userKey";
 import Calculator from "@/components/Calculator";
 import QuestionTableView from "@/components/QuestionTableView";
 
-const SECONDS_PER_QUESTION = 80; // mirrors the real ~40min / 30Q pace
-
+const SECONDS_PER_QUESTION = 80;
 const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D", "E"];
+
+// Difficulty badge styling
+const DIFFICULTY_BADGE: Record<Difficulty, { label: string; cls: string }> = {
+  easy:   { label: "Easy",   cls: "bg-green-100 text-green-800 border-green-200" },
+  medium: { label: "Medium", cls: "bg-amber-100 text-amber-800 border-amber-200" },
+  hard:   { label: "Hard",   cls: "bg-red-100 text-red-800 border-red-200" },
+};
+
+// Flag reasons — stored in localStorage under "flagged_questions"
+type FlagReason = "wrong-answer-key" | "ambiguous" | "other";
+const FLAG_REASONS: { value: FlagReason; label: string }[] = [
+  { value: "wrong-answer-key", label: "Answer key is wrong" },
+  { value: "ambiguous",        label: "Multiple options defensible" },
+  { value: "other",            label: "Other issue" },
+];
+
+function getFlagged(): Record<string, FlagReason> {
+  try {
+    return JSON.parse(localStorage.getItem("flagged_questions") ?? "{}");
+  } catch { return {}; }
+}
+
+function saveFlag(id: string, reason: FlagReason) {
+  const current = getFlagged();
+  current[id] = reason;
+  localStorage.setItem("flagged_questions", JSON.stringify(current));
+}
+
+function removeFlag(id: string) {
+  const current = getFlagged();
+  delete current[id];
+  localStorage.setItem("flagged_questions", JSON.stringify(current));
+}
 
 export default function MockRunner({
   topic,
@@ -38,6 +71,8 @@ export default function MockRunner({
   const [assessing, setAssessing] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
   const [reviewId, setReviewId] = useState<string | null>(null);
+  const [flagged, setFlagged] = useState<FlagReason | null>(null);
+  const [showFlagMenu, setShowFlagMenu] = useState(false);
 
   const { record: recordRun } = useMockHistory();
   const { recordRun: recordProgress } = useProgress();
@@ -45,12 +80,17 @@ export default function MockRunner({
 
   const current = questions[index];
 
+  // Load flag state when question changes
+  useEffect(() => {
+    if (!current) return;
+    const flags = getFlagged();
+    setFlagged(flags[current.id] ?? null);
+    setShowFlagMenu(false);
+  }, [current?.id]);
+
   const submit = useCallback(
     (pick: ChoiceKey | null) => {
       if (revealed || !current) return;
-      // pick === null means the timer ran out with nothing selected — a SKIP.
-      // Record it as null (excluded from the accuracy signal, shown as skipped),
-      // not a fake "A".
       const record: AnswerRecord = {
         questionId: current.id,
         topic: current.topic,
@@ -68,19 +108,13 @@ export default function MockRunner({
   // Per-question countdown; auto-submit on timeout.
   useEffect(() => {
     if (revealed || finished || !current) return;
-    if (secondsLeft <= 0) {
-      submit(chosen);
-      return;
-    }
+    if (secondsLeft <= 0) { submit(chosen); return; }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
   }, [secondsLeft, revealed, finished, current, chosen, submit]);
 
   function next() {
-    if (index + 1 >= questions.length) {
-      setFinished(true);
-      return;
-    }
+    if (index + 1 >= questions.length) { setFinished(true); return; }
     setIndex((i) => i + 1);
     setChosen(null);
     setRevealed(false);
@@ -121,24 +155,19 @@ export default function MockRunner({
         <h2 className="text-xl font-semibold">
           Score: {correct}/{records.length}
         </h2>
-
         {assessing && (
           <p className="mt-3 text-sm text-neutral-500">Analysing your answers…</p>
         )}
-
         {assessment && (
           <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
             <p className="font-medium">{assessment.summary}</p>
             {assessment.studyNext.length > 0 && (
               <ul className="mt-2 list-disc pl-5 text-sm text-neutral-700">
-                {assessment.studyNext.map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
+                {assessment.studyNext.map((s, i) => <li key={i}>{s}</li>)}
               </ul>
             )}
           </div>
         )}
-
         <div className="mt-4 flex flex-wrap gap-2">
           <a
             href={reviewId ? `/history?test=${reviewId}` : "/history"}
@@ -146,10 +175,7 @@ export default function MockRunner({
           >
             Review this test
           </a>
-          <a
-            href="/"
-            className="inline-block rounded border border-neutral-300 px-4 py-2"
-          >
+          <a href="/" className="inline-block rounded border border-neutral-300 px-4 py-2">
             Back to topics
           </a>
         </div>
@@ -158,20 +184,24 @@ export default function MockRunner({
   }
 
   const isCorrect = chosen === current.answer;
+  const badge = DIFFICULTY_BADGE[current.difficulty];
 
   return (
     <div className="mt-6">
+      {/* Header: progress + difficulty badge + timer */}
       <div className="flex items-center justify-between text-sm text-neutral-500">
-        <span>
-          Question {index + 1} / {questions.length}
-        </span>
-        <span className={secondsLeft <= 10 ? "font-semibold text-red-600" : ""}>
-          {secondsLeft}s
-        </span>
+        <span>Question {index + 1} / {questions.length}</span>
+        <div className="flex items-center gap-2">
+          <span className={`rounded border px-2 py-0.5 text-xs font-medium ${badge.cls}`}>
+            {badge.label}
+          </span>
+          <span className={secondsLeft <= 10 ? "font-semibold text-red-600" : ""}>
+            {secondsLeft}s
+          </span>
+        </div>
       </div>
 
       {current.table && <QuestionTableView table={current.table} />}
-
       <p className="mt-3 whitespace-pre-line font-medium">{current.stem}</p>
 
       {topic === "numerical" && (
@@ -182,11 +212,7 @@ export default function MockRunner({
           >
             {showCalc ? "Hide calculator" : "Show calculator"}
           </button>
-          {showCalc && (
-            <div className="mt-2">
-              <Calculator />
-            </div>
-          )}
+          {showCalc && <div className="mt-2"><Calculator /></div>}
         </div>
       )}
 
@@ -198,8 +224,7 @@ export default function MockRunner({
           const isPick = k === chosen;
           let cls = "border-neutral-300 bg-white hover:border-neutral-900";
           if (revealed && isAnswer) cls = "border-green-500 bg-green-50";
-          else if (revealed && isPick && !isAnswer)
-            cls = "border-red-500 bg-red-50";
+          else if (revealed && isPick && !isAnswer) cls = "border-red-500 bg-red-50";
           return (
             <button
               key={k}
@@ -237,6 +262,53 @@ export default function MockRunner({
               {current.workedSolution}
             </p>
           )}
+
+          {/* Flag / question validation mechanism */}
+          <div className="mt-4 border-t border-neutral-200 pt-3">
+            {flagged ? (
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium text-amber-700">
+                  ⚑ Flagged: {FLAG_REASONS.find((r) => r.value === flagged)?.label}
+                </span>
+                <button
+                  onClick={() => { removeFlag(current.id); setFlagged(null); }}
+                  className="text-xs text-neutral-500 underline hover:text-neutral-900"
+                >
+                  Remove flag
+                </button>
+              </div>
+            ) : (
+              <div className="relative inline-block">
+                <button
+                  onClick={() => setShowFlagMenu((v) => !v)}
+                  className="text-xs text-neutral-500 hover:text-amber-700 hover:underline"
+                >
+                  ⚑ Flag this question
+                </button>
+                {showFlagMenu && (
+                  <div className="absolute left-0 top-6 z-10 w-56 rounded-lg border border-neutral-200 bg-white shadow-md">
+                    <p className="border-b border-neutral-100 px-3 py-2 text-xs font-medium text-neutral-600">
+                      Why are you flagging this?
+                    </p>
+                    {FLAG_REASONS.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => {
+                          saveFlag(current.id, value);
+                          setFlagged(value);
+                          setShowFlagMenu(false);
+                        }}
+                        className="block w-full px-3 py-2 text-left text-sm hover:bg-neutral-50"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <button
             onClick={next}
             className="mt-4 rounded bg-neutral-900 px-4 py-2 text-white"
