@@ -15,13 +15,21 @@ import {
 
 const CONFIG_KEY = "epso.planConfig";
 
-// Where each component sends you. In-app for what the app drills well; the
-// official/validated route for abstract + essay (the app can't train those).
-const RESOURCE: Record<ExamComponent, { href: string; label: string }> = {
+// Where each component sends you. Primary = the drill to do; secondary (where
+// present) = the technique/tutorial to read first. Abstract now drills in-app
+// at /abstract, with the technique tutorial as a secondary link.
+const RESOURCE: Record<
+  ExamComponent,
+  { href: string; label: string; secondary?: { href: string; label: string } }
+> = {
   "field-ai": { href: "/exam", label: "AI field exam / mocks" },
   verbal: { href: "/mock/verbal", label: "Verbal drill" },
   numerical: { href: "/mock/numerical", label: "Numerical drill" },
-  abstract: { href: "/tutorials/abstract-reasoning", label: "Abstract technique + official tool" },
+  abstract: {
+    href: "/abstract",
+    label: "Abstract practice",
+    secondary: { href: "/tutorials/abstract-reasoning", label: "Technique guide" },
+  },
   essay: { href: "#study-externally", label: "EUFTE essay (external)" },
 };
 
@@ -77,8 +85,9 @@ export default function WeeklyPlan() {
       <h2 className="text-lg font-semibold">This week&rsquo;s study plan</h2>
       <p className="mt-1 text-sm text-neutral-600">
         Weak-topic-weighted and rebuilt every visit from your latest results.
-        It allocates the week across all four test parts and tells you which
-        technique to use.
+        It allocates the week across all five exam components &mdash; including
+        the eliminatory abstract gate, now drillable in-app &mdash; and tells
+        you which technique to use for each block.
       </p>
 
       {/* Config */}
@@ -123,33 +132,50 @@ export default function WeeklyPlan() {
             return (
               <li
                 key={i}
-                className="flex items-start justify-between gap-3 rounded-lg border border-neutral-200 bg-white p-3"
+                className="rounded-lg border border-neutral-200 bg-white p-3"
               >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-neutral-900 px-2 py-0.5 text-xs font-semibold text-white">
-                      Day {b.day}
-                    </span>
-                    <span className="font-medium">{b.label}</span>
-                    <span className="text-xs text-neutral-500">· {b.minutes} min</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded bg-neutral-900 px-2 py-0.5 text-xs font-semibold text-white">
+                        Day {b.day}
+                      </span>
+                      <span className="font-medium">{b.label}</span>
+                      <span className="text-xs text-neutral-500">· {b.minutes} min</span>
+                      {b.component === "abstract" && (
+                        <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-800">
+                          eliminatory gate
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-neutral-600">
+                      <span className="font-medium text-neutral-800">
+                        {TECHNIQUE_LABELS[b.technique]}
+                      </span>{" "}
+                      — {b.reason}
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs text-neutral-600">
-                    <span className="font-medium text-neutral-800">
-                      {TECHNIQUE_LABELS[b.technique]}
-                    </span>{" "}
-                    — {b.reason}
-                  </p>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <a
+                      href={res.href}
+                      className={`rounded px-3 py-1.5 text-xs font-medium ${
+                        b.inApp
+                          ? "bg-neutral-900 text-white"
+                          : "border border-neutral-300 text-neutral-700"
+                      }`}
+                    >
+                      {b.inApp ? res.label : "External"}
+                    </a>
+                    {res.secondary && (
+                      <a
+                        href={res.secondary.href}
+                        className="rounded border border-neutral-300 px-3 py-1 text-[11px] text-neutral-600 hover:border-neutral-900"
+                      >
+                        {res.secondary.label}
+                      </a>
+                    )}
+                  </div>
                 </div>
-                <a
-                  href={res.href}
-                  className={`shrink-0 rounded px-3 py-1.5 text-xs font-medium ${
-                    b.inApp
-                      ? "bg-neutral-900 text-white"
-                      : "border border-neutral-300 text-neutral-700"
-                  }`}
-                >
-                  {b.inApp ? "Start" : "External"}
-                </a>
               </li>
             );
           })}

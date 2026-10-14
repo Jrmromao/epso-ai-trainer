@@ -17,11 +17,14 @@ const ALL_COMPONENTS: ExamComponent[] = [
   "essay",
 ];
 
-// Components the app can drill in-house. Abstract (visual) + essay are external.
+// Components the app can drill in-house. Abstract now has a real in-app
+// practice (deterministic rule engine at /abstract), so it is in-app too.
+// Only the EUFTE essay remains external.
 export const IN_APP_COMPONENTS: ReadonlySet<ExamComponent> = new Set<ExamComponent>([
   "field-ai",
   "verbal",
   "numerical",
+  "abstract",
 ]);
 
 export interface ComponentStatus {
@@ -183,7 +186,8 @@ const GATE_BOOST: Partial<Record<ExamComponent, number>> = {
 
 function techniqueFor(component: ExamComponent, isReview: boolean): StudyTechnique {
   if (isReview) return "spaced-review";
-  if (component === "abstract" || component === "essay") return "external-drill";
+  if (component === "essay") return "external-drill"; // only the essay is external now
+  if (component === "abstract") return "retrieval"; // in-app pattern practice
   if (component === "field-ai") return "interleaving";
   return "retrieval";
 }
@@ -249,17 +253,17 @@ export function buildWeeklyPlan(
   }
 
   // Safety net: if the week filled without an abstract slot, replace the last
-  // block with abstract — the gate must not be skipped.
+  // block with abstract — the gate must not be skipped. It is now in-app.
   if (days >= 3 && !usedComponents.has("abstract") && blocks.length > 0) {
     const last = blocks[blocks.length - 1];
     blocks[blocks.length - 1] = {
       ...last,
       component: "abstract",
       label: COMPONENT_LABELS.abstract,
-      technique: "external-drill",
+      technique: "retrieval",
       minutes: last.minutes,
       reason: "The abstract gate eliminates candidates — it gets a weekly slot even when other areas look weaker.",
-      inApp: false,
+      inApp: true,
     };
   }
 
