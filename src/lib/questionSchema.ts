@@ -455,6 +455,49 @@ function buildNumericalPrompt(count: number, difficulty: Difficulty = "medium", 
     "total, per-capita) rather than reading a single cell/bar directly. At least " +
     "one question per batch should have E as the correct answer.";
 
+  // Realistic figures: real EPSO tables use large real-world numbers with
+  // explicit units, and exploit unit confusion. Toy round numbers feel fake.
+  const figuresNote =
+    "REALISTIC FIGURES (critical): Use large, real-world-scale numbers, not toy " +
+    "round values. Populations in millions (e.g. 10.4, 83.2), monetary values in " +
+    "millions or billions of EUR, counts in thousands. Put the unit in the column " +
+    "header or caption (e.g. 'População (milhares)', 'PIB (milhões EUR)', 'Despesa " +
+    "(mil milhões EUR)'). Use decimals and non-round numbers (e.g. 19 330, 2.47, " +
+    "148.6) so the calculation requires a calculator — a calculator is provided in " +
+    "the real exam. At least one table should use a 'thousands' or 'millions' unit " +
+    "where a candidate who ignores the unit header would get a wrong answer.";
+
+  // The four distractors A-D should each encode a NAMED, predictable mistake
+  // that real candidates make — this is what separates a realistic item from a
+  // random-numbers item.
+  const distractorNote =
+    "DISTRACTOR DESIGN (critical — each wrong option must encode a NAMED mistake): " +
+    "The three incorrect numeric options (and E when E is wrong) must each be the " +
+    "result of ONE specific, predictable error, NOT a random number. Use a mix of:\n" +
+    "- WRONG BASELINE: percentage change divided by the NEW value instead of the " +
+    "original (e.g. change ÷ new instead of change ÷ old).\n" +
+    "- PERCENTAGE-POINTS vs PERCENT CHANGE: subtracting two percentages directly " +
+    "(giving percentage points) when a relative percentage change was asked, or " +
+    "vice versa.\n" +
+    "- INCREASE BY vs INCREASE TO: an option that gives the final value when the " +
+    "change was asked, or the change when the final value was asked.\n" +
+    "- INVERTED RATIO: the correct ratio flipped (b:a instead of a:b).\n" +
+    "- UNIT ERROR: an answer off by a factor of 10/100/1000 from ignoring a " +
+    "'thousands'/'millions' column header.\n" +
+    "- EARLY ROUNDING: an answer that rounded an intermediate step and is close " +
+    "but not equal to the correct value.\n" +
+    "In the \"explanation\", name which trap each wrong option corresponds to. " +
+    "The correct answer must come from using the ORIGINAL value as the baseline, " +
+    "keeping full precision until the final step, and respecting the stated units.";
+
+  // Multi-step requirement — real EPSO rarely tests a single operation.
+  const multiStepNote =
+    "MULTI-STEP REQUIREMENT: For medium and hard items the candidate must combine " +
+    "AT LEAST TWO data items and TWO operations — for example, compute a percentage " +
+    "change for one row, then express it as a ratio against another row; or derive " +
+    "a total from a per-unit value and a count, then take a share of it. A single " +
+    "read-and-divide is only acceptable for easy items.";
+
   const system =
     "You are a senior EPSO test author writing NUMERICAL REASONING items for an " +
     "EU competition. Each item MUST have:\n" +
@@ -474,11 +517,10 @@ function buildNumericalPrompt(count: number, difficulty: Difficulty = "medium", 
     "step-by-step reveal in learn mode.\n" +
     '8) "difficulty": set to "' + difficulty + '".\n' +
     '9) "language": set to "' + language + '".\n\n' +
-    "Distractors A-D must be the results of PLAUSIBLE mistakes: wrong base year, " +
-    "inverting a ratio, forgetting to convert units, using the wrong column, " +
-    "rounding at the wrong step. They must be numerically close to the correct " +
-    "answer — not random numbers.\n\n" +
     tableNote + "\n\n" +
+    figuresNote + "\n\n" +
+    distractorNote + "\n\n" +
+    multiStepNote + "\n\n" +
     "Output ONLY a JSON object of the form " +
     '{"questions":[{"table"?:{"caption":string,"headers":string[],"rows":string[][]},' +
     '"chart"?:{"type":"bar"|"line","caption":string,"categories":string[],"series":[{"name":string,"values":number[]}],"yAxisLabel":string},' +
