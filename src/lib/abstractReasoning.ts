@@ -321,8 +321,163 @@ function panelsEqual(a: Panel, b: Panel): boolean {
 }
 
 // ----------------------------------------------------------------------------
+// Additional rule templates — give each difficulty several distinct patterns
+// so consecutive questions don't all look the same.
+// ----------------------------------------------------------------------------
+
+const ALL_SHAPES: ShapeKind[] = ["circle", "square", "triangle", "diamond"];
+
+// EASY template 2: a single shape whose FILL alternates (solid/outline) while
+// the shape itself cycles through a fixed 2-shape pair.
+function genEasyFillCycle(rng: () => number, id: string): AbstractQuestion {
+  const twoShapes = shuffleArr(rng, ALL_SHAPES).slice(0, 2);
+  const startFill: Fill = pick(rng, ["solid", "outline"] as Fill[]);
+  const elemAt = (i: number): Element => ({
+    shape: twoShapes[i % 2],
+    fill: i % 2 === 0 ? startFill : startFill === "solid" ? "outline" : "solid",
+  });
+  const panelAt = (i: number): Panel => ({ layout: "single", slots: [elemAt(i)] });
+  const sequence = [0, 1, 2, 3, 4].map(panelAt);
+  const correct = panelAt(5);
+  const distractors = [
+    { layout: "single", slots: [elemAt(4)] } as Panel, // repeat prev
+    { layout: "single", slots: [{ ...elemAt(5), fill: elemAt(5).fill === "solid" ? "outline" : "solid" }] } as Panel,
+    { layout: "single", slots: [{ ...elemAt(5), shape: pick(rng, ALL_SHAPES.filter((s) => !twoShapes.includes(s))) }] } as Panel,
+    { layout: "single", slots: [elemAt(3)] } as Panel,
+  ];
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "easy", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary: "The shape alternates between two shapes, and the fill alternates solid/outline each step. Continue both alternations.",
+  };
+}
+
+// EASY template 3: a shape that grows the count? Not with this model — instead,
+// a single shape that MOVES position within a row-of-3 (left->mid->right->...).
+function genEasyMove(rng: () => number, id: string): AbstractQuestion {
+  const shape = pick(rng, ALL_SHAPES);
+  const fill: Fill = pick(rng, ["solid", "outline"] as Fill[]);
+  const dir = pick(rng, [1, -1]);
+  const posAt = (i: number) => ((i * dir) % 3 + 3) % 3;
+  const panelAt = (i: number): Panel => {
+    const slots: (Element | null)[] = [null, null, null];
+    slots[posAt(i)] = { shape, fill };
+    return { layout: "row3", slots };
+  };
+  const sequence = [0, 1, 2, 3, 4].map(panelAt);
+  const correct = panelAt(5);
+  const distractors: Panel[] = [panelAt(4), panelAt(3)];
+  // wrong-position variants
+  for (let pos = 0; pos < 3 && distractors.length < 4; pos++) {
+    if (pos === posAt(5)) continue;
+    const slots: (Element | null)[] = [null, null, null];
+    slots[pos] = { shape, fill };
+    distractors.push({ layout: "row3", slots });
+  }
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors.slice(0, 4)], 0);
+  return {
+    id, difficulty: "easy", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary: `The shape moves one position ${dir === 1 ? "rightwards" : "leftwards"} each step, wrapping around. Continue the movement.`,
+  };
+}
+
+// MEDIUM template 2: a stack of two shapes; top rotates through shapes one way,
+// bottom cycles fill the other way.
+function genMediumStack(rng: () => number, id: string): AbstractQuestion {
+  const topCycle = shuffleArr(rng, ALL_SHAPES).slice(0, 3);
+  const bottomShape = pick(rng, ALL_SHAPES);
+  const panelAt = (i: number): Panel => ({
+    layout: "stack2",
+    slots: [
+      { shape: topCycle[i % 3], fill: "outline" },
+      { shape: bottomShape, fill: i % 2 === 0 ? "solid" : "outline" },
+    ],
+  });
+  const sequence = [0, 1, 2, 3, 4].map(panelAt);
+  const correct = panelAt(5);
+  const distractors: Panel[] = [];
+  // break top
+  { const p = clonePanel(correct); p.slots[0] = { ...p.slots[0]!, shape: topCycle[(5 + 1) % 3] }; distractors.push(p); }
+  // break bottom fill
+  { const p = clonePanel(correct); const b = p.slots[1]!; p.slots[1] = { ...b, fill: b.fill === "solid" ? "outline" : "solid" }; distractors.push(p); }
+  // repeat prev
+  distractors.push(panelAt(4));
+  // top filled solid (wrong attribute)
+  { const p = clonePanel(correct); p.slots[0] = { ...p.slots[0]!, fill: "solid" }; distractors.push(p); }
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "medium", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary: "Two independent rules stacked: the top shape cycles through a 3-shape sequence; the bottom shape keeps its shape but alternates fill. Advance both.",
+  };
+}
+
+// MEDIUM template 3: two arrows in a row, each rotating by a different step.
+function genMediumTwoArrows(rng: () => number, id: string): AbstractQuestion {
+  const startA = pick(rng, CW);
+  const startB = pick(rng, CW);
+  const stepA = pick(rng, [1, -1]);
+  const stepB = pick(rng, [1, -1]);
+  const panelAt = (i: number): Panel => ({
+    layout: "row3",
+    slots: [
+      { shape: "arrow", fill: "solid", direction: rotateDir(startA, i * stepA) },
+      null,
+      { shape: "arrow", fill: "solid", direction: rotateDir(startB, i * stepB) },
+    ],
+  });
+  const sequence = [0, 1, 2, 3, 4].map(panelAt);
+  const correct = panelAt(5);
+  const distractors: Panel[] = [];
+  { const p = clonePanel(correct); p.slots[0] = { ...p.slots[0]!, direction: rotateDir(p.slots[0]!.direction!, 1) }; distractors.push(p); }
+  { const p = clonePanel(correct); p.slots[2] = { ...p.slots[2]!, direction: rotateDir(p.slots[2]!.direction!, 1) }; distractors.push(p); }
+  distractors.push(panelAt(4));
+  { const p = clonePanel(correct); p.slots[0] = { ...p.slots[0]!, direction: rotateDir(p.slots[0]!.direction!, 2) }; distractors.push(p); }
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "medium", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary: `Two arrows rotate independently: the left one ${stepA === 1 ? "clockwise" : "anticlockwise"}, the right one ${stepB === 1 ? "clockwise" : "anticlockwise"}, 90° per step.`,
+  };
+}
+
+// HARD template 2: cross layout where outer shapes rotate position AND each
+// step one outer shape flips its fill (travelling flip).
+function genHardFlipTravel(rng: () => number, id: string): AbstractQuestion {
+  const base: Element[] = shuffleArr(rng, ALL_SHAPES).map((shape) => ({ shape, fill: "outline" as Fill }));
+  const posStep = pick(rng, [1, -1]);
+  const panelAt = (i: number): Panel => {
+    const rotated = base.map((_, k) => ({ ...base[(k - i * posStep + 400) % 4] }));
+    // the shape at position (i % 4) is solid-filled (flip travels round)
+    rotated[i % 4] = { ...rotated[i % 4], fill: "solid" };
+    return { layout: "cross", slots: [rotated[0], rotated[1], rotated[2], rotated[3], null] };
+  };
+  const sequence = [0, 1, 2, 3, 4].map(panelAt);
+  const correct = panelAt(5);
+  const distractors: Panel[] = [];
+  distractors.push(panelAt(4)); // rotation off by one
+  { const p = clonePanel(correct); // wrong one filled
+    const idx = p.slots.findIndex((s) => s && s.fill === "solid");
+    if (idx >= 0) { p.slots[idx] = { ...p.slots[idx]!, fill: "outline" }; p.slots[(idx + 1) % 4] = { ...p.slots[(idx + 1) % 4]!, fill: "solid" }; }
+    distractors.push(p); }
+  { const p = clonePanel(correct); [p.slots[0], p.slots[2]] = [p.slots[2], p.slots[0]]; distractors.push(p); }
+  { const p = clonePanel(correct); const s = p.slots[3]!; p.slots[3] = { ...s, shape: pick(rng, ALL_SHAPES) }; distractors.push(p); }
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "hard", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary: "Two rules: the four outer shapes rotate position around the cross each step, and a solid-fill 'travels' one position round the cross each step (only one shape is filled at a time).",
+  };
+}
+
+// ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
+type Generator = (rng: () => number, id: string) => AbstractQuestion;
+
+const TEMPLATES: Record<AbstractDifficulty, Generator[]> = {
+  easy: [genEasy, genEasyFillCycle, genEasyMove],
+  medium: [genMedium, genMediumStack, genMediumTwoArrows],
+  hard: [genHard, genHardFlipTravel],
+};
+
 export function generateAbstractQuestion(
   difficulty: AbstractDifficulty,
   seed?: number,
@@ -330,7 +485,7 @@ export function generateAbstractQuestion(
   const s = seed ?? Math.floor(Math.random() * 1_000_000);
   const rng = makeRng(s);
   const id = `abstract-${difficulty}-${s}`;
-  if (difficulty === "easy") return genEasy(rng, id);
-  if (difficulty === "medium") return genMedium(rng, id);
-  return genHard(rng, id);
+  const templates = TEMPLATES[difficulty];
+  const gen = templates[Math.floor(rng() * templates.length)];
+  return gen(rng, id);
 }
