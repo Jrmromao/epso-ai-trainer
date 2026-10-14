@@ -7,6 +7,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "aiact-01",
     topic: "ai-act",
+    difficulty: "easy",
+    language: "en",
     stem: "Under the EU AI Act (Reg. 2024/1689), which risk category do AI systems used for social scoring by public authorities fall into?",
     choices: {
       A: "High-risk, permitted with conformity assessment",
@@ -21,6 +23,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "aiact-02",
     topic: "ai-act",
+    difficulty: "easy",
+    language: "en",
     stem: "The EU AI Act classifies AI systems primarily according to:",
     choices: {
       A: "The programming language used",
@@ -35,6 +39,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "aiact-03",
     topic: "ai-act",
+    difficulty: "medium",
+    language: "en",
     stem: "Which of the following is a 'high-risk' AI system under the AI Act?",
     choices: {
       A: "A spam filter",
@@ -49,6 +55,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "aiact-04",
     topic: "ai-act",
+    difficulty: "hard",
+    language: "en",
     stem: "General-Purpose AI (GPAI) models with 'systemic risk' are presumed when training compute exceeds a threshold measured in:",
     choices: {
       A: "Number of parameters only",
@@ -63,6 +71,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "aiact-05",
     topic: "ai-act",
+    difficulty: "medium",
+    language: "en",
     stem: "Which obligation applies to a limited-risk system such as a chatbot interacting with humans?",
     choices: {
       A: "Full conformity assessment before market placement",
@@ -78,6 +88,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "ml-01",
     topic: "ml-fundamentals",
+    difficulty: "easy",
+    language: "en",
     stem: "A model performs excellently on training data but poorly on unseen test data. This is:",
     choices: {
       A: "Underfitting",
@@ -91,6 +103,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "ml-02",
     topic: "ml-fundamentals",
+    difficulty: "medium",
+    language: "en",
     stem: "Which technique is MOST directly used to reduce overfitting?",
     choices: {
       A: "Increasing model complexity",
@@ -104,6 +118,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "ml-03",
     topic: "ml-fundamentals",
+    difficulty: "easy",
+    language: "en",
     stem: "In supervised learning, the training data is characterised by:",
     choices: {
       A: "Having no labels",
@@ -119,6 +135,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "genai-01",
     topic: "genai-rag",
+    difficulty: "easy",
+    language: "en",
     stem: "Retrieval-Augmented Generation (RAG) improves an LLM's output primarily by:",
     choices: {
       A: "Increasing the model's parameter count",
@@ -133,6 +151,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "genai-02",
     topic: "genai-rag",
+    difficulty: "easy",
+    language: "en",
     stem: "In the context of LLMs, 'hallucination' refers to:",
     choices: {
       A: "The model crashing during inference",
@@ -146,6 +166,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "genai-03",
     topic: "genai-rag",
+    difficulty: "medium",
+    language: "en",
     stem: "The transformer architecture, foundational to modern LLMs, is built around which core mechanism?",
     choices: {
       A: "Convolution",
@@ -159,6 +181,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "genai-04",
     topic: "genai-rag",
+    difficulty: "medium",
+    language: "en",
     stem: "'Agentic AI' typically refers to systems that:",
     choices: {
       A: "Only classify static images",
@@ -174,6 +198,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "mlops-01",
     topic: "mlops",
+    difficulty: "easy",
+    language: "en",
     stem: "'Model drift' in a production ML system refers to:",
     choices: {
       A: "The model file moving to another server",
@@ -187,6 +213,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "mlops-02",
     topic: "mlops",
+    difficulty: "medium",
+    language: "en",
     stem: "Which MLOps practice MOST directly addresses model drift?",
     choices: {
       A: "One-time deployment with no further checks",
@@ -200,6 +228,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "mlops-03",
     topic: "mlops",
+    difficulty: "medium",
+    language: "en",
     stem: "A model registry in an MLOps pipeline is primarily used to:",
     choices: {
       A: "Store user passwords",
@@ -215,6 +245,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "trust-01",
     topic: "trustworthy-ai",
+    difficulty: "easy",
+    language: "en",
     stem: "'Explainability' (XAI) in an AI system refers to the ability to:",
     choices: {
       A: "Make the model run faster",
@@ -228,6 +260,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "trust-02",
     topic: "trustworthy-ai",
+    difficulty: "hard",
+    language: "en",
     stem: "Under GDPR Article 22, individuals have the right:",
     choices: {
       A: "To never be shown any advertising",
@@ -242,6 +276,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "trust-03",
     topic: "trustworthy-ai",
+    difficulty: "easy",
+    language: "en",
     stem: "Which is a pillar of the EU's 'Trustworthy AI' guidelines?",
     choices: {
       A: "Maximising profit above all",
@@ -257,6 +293,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "policy-01",
     topic: "policy",
+    difficulty: "hard",
+    language: "en",
     stem: "The body established under the AI Act to help ensure consistent application across the EU and oversee GPAI models is the:",
     choices: {
       A: "European Central Bank",
@@ -271,6 +309,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "policy-02",
     topic: "policy",
+    difficulty: "medium",
+    language: "en",
     stem: "A key EU policy rationale for regulating AI via a single Regulation (rather than per Member State) is to:",
     choices: {
       A: "Increase divergence between national rules",
@@ -286,6 +326,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "verbal-01",
     topic: "verbal",
+    difficulty: "easy",
+    language: "en",
     stem: "Passage: 'Moldavia is a region in north-eastern Romania. A former independent state until its union with Wallachia in 1859, Moldavia now forms much of the modern state of Romania.'\n\nStatement: Moldavia was an independent state before 1859.",
     choices: {
       A: "True",
@@ -305,6 +347,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "verbalrc-01",
     topic: "verbal-rc",
+    difficulty: "medium",
+    language: "en",
     stem:
       "Genetic testing is a medical procedure that identifies changes or specific problems in genes and chromosomes. Most of the time, genetic testing is used to identify inherited illnesses such as haemophilia. The results of a genetic test can confirm or rule out a suspected condition or help determine a person's chance of developing or passing on a genetic illness. Several hundred genetic tests are currently in use and more are being developed. Because testing has both benefits and limitations, the decision about whether to be tested is voluntary. A counsellor can give advice and information about the testing, but many people still doubt its usefulness. They believe that genetic testing is associated only with the heredity of fatal conditions and, on that basis, do not want to know.\n\nWhich of the following statements is correct?",
     choices: {
@@ -320,6 +364,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "verbalrc-02",
     topic: "verbal-rc",
+    difficulty: "hard",
+    language: "en",
     stem:
       "The gambel oak is a small deciduous tree which typically grows at altitudes of 1 700 to 2 400 metres above sea level. Widespread in the foothills of the central south-western United States, it tends to grow where rainfall averages between 30 and 60 centimetres per year. Gambel oaks flourish on hillsides with thin, rocky, alkaline soil where other plant species are limited. They can survive in richer soils, but they face more competition for resources from other plants. Gambel oaks have adapted to wet springs and hot, dry summers - conditions which are also favourable to fires. However, even if badly burned, it can re-establish itself quickly from its roots below ground and handles drought conditions well.\n\nWhich of the following statements is correct?",
     choices: {
@@ -340,6 +386,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "numerical-01",
     topic: "numerical",
+    difficulty: "medium",
+    language: "en",
     table: {
       caption: "National solar generation",
       headers: ["Year", "Output (GWh)", "Population (m)"],
@@ -372,6 +420,8 @@ export const SEED_QUESTIONS: Question[] = [
   {
     id: "numerical-02",
     topic: "numerical",
+    difficulty: "hard",
+    language: "en",
     table: {
       caption: "R & D expenditure by country",
       headers: ["Country", "GDP per head 2000 (€)", "R&D (% of GDP) 2000", "R&D (% of GDP) 2003"],
@@ -400,6 +450,84 @@ export const SEED_QUESTIONS: Question[] = [
       "2003 GDP per head = 19330 × 1.03 = 19910 €.",
       "2003 per-head R&D = 19910 × 1.89% = 19910 × 0.0189 = 376.3 €.",
       "Change = 376.3 / 380.8 − 1 ≈ −0.0118 = −1.2% → a fall of about 1.2%, answer A.",
+    ],
+  },
+
+  // ---------------- PT-PT SEEDS ----------------
+  // Verbal T/F, Verbal RC e Numérico em português europeu.
+  // Estes itens treinam o raciocínio verbal e numérico em Língua 1 (pt-PT),
+  // tal como acontece no exame real EPSO AD8.
+
+  // Verbal T/F — pt-PT
+  {
+    id: "verbal-ptpt-01",
+    topic: "verbal",
+    difficulty: "medium",
+    language: "pt-PT",
+    stem: "Passagem: 'A Serra da Estrela é o ponto mais alto de Portugal continental, com uma altitude máxima de 1993 metros. O parque natural que a envolve foi criado em 1976 e é o mais extenso de Portugal. A região é conhecida pela produção do único queijo português com Denominação de Origem Protegida (DOP) que leva o nome da serra.'\n\nAfirmação: A Serra da Estrela tem a maior altitude de todo o território português.",
+    choices: {
+      A: "Verdadeiro",
+      B: "Falso",
+      C: "Não é possível saber",
+      D: "-",
+    },
+    answer: "B",
+    explanation:
+      "Falso. A passagem refere explicitamente 'ponto mais alto de Portugal continental', não de todo o território português. As ilhas dos Açores incluem o Pico (2351 m), que é mais alto. A distinção 'continental' é a armadilha central deste item. Responda apenas com base na passagem.",
+  },
+
+  // Verbal RC — pt-PT
+  {
+    id: "verbalrc-ptpt-01",
+    topic: "verbal-rc",
+    difficulty: "medium",
+    language: "pt-PT",
+    stem: "A fotossíntese é o processo pelo qual as plantas, as algas e algumas bactérias convertem a energia luminosa em energia química armazenada sob a forma de glucose. Este processo ocorre principalmente nos cloroplastos, organelos celulares que contêm clorofila, o pigmento responsável pela absorção da luz solar. A fotossíntese liberta oxigénio como subproduto da decomposição das moléculas de água. Sem este processo, a concentração de dióxido de carbono na atmosfera seria consideravelmente mais elevada e os níveis de oxigénio muito mais reduzidos. Estima-se que as plantas terrestres e o fitoplâncton marinho sejam responsáveis por cerca de metade da produção total de oxigénio na Terra.\n\nQual das seguintes afirmações está correta de acordo com o texto?",
+    choices: {
+      A: "A fotossíntese ocorre exclusivamente nas plantas terrestres",
+      B: "A clorofila é o pigmento que permite às plantas absorver luz solar para realizar a fotossíntese",
+      C: "Sem a fotossíntese, os níveis de oxigénio na atmosfera seriam superiores aos atuais",
+      D: "O fitoplâncton marinho produz a totalidade do oxigénio gerado pela fotossíntese na Terra",
+    },
+    answer: "B",
+    explanation:
+      "B é a paráfrase fiel: o texto afirma que os cloroplastos 'contêm clorofila, o pigmento responsável pela absorção da luz solar'. A é GENERALIZAÇÃO INDEVIDA — o texto inclui explicitamente algas e certas bactérias, não apenas plantas terrestres. C é INVERSÃO/NEGAÇÃO — o texto diz que sem fotossíntese os níveis de oxigénio seriam 'muito mais reduzidos', não superiores. D é TROCA DE QUANTIDADE/ÂMBITO — o texto diz que plantas e fitoplâncton são responsáveis por 'cerca de metade' da produção total, não pela totalidade.",
+  },
+
+  // Numérico — pt-PT
+  {
+    id: "numerical-ptpt-01",
+    topic: "numerical",
+    difficulty: "medium",
+    language: "pt-PT",
+    table: {
+      caption: "Produção de energia renovável por fonte (TWh)",
+      headers: ["Fonte", "2020", "2022"],
+      rows: [
+        ["Solar", "24", "36"],
+        ["Eólica", "80", "92"],
+        ["Hídrica", "56", "49"],
+      ],
+    },
+    stem: "Qual foi a variação percentual na produção total de energia renovável entre 2020 e 2022?",
+    choices: {
+      A: "5,6%",
+      B: "8,1%",
+      C: "11,3%",
+      D: "14,4%",
+      E: "Nenhuma das anteriores",
+    },
+    answer: "B",
+    explanation:
+      "Total 2020 = 24 + 80 + 56 = 160 TWh. Total 2022 = 36 + 92 + 49 = 177 TWh. Variação = (177 − 160) / 160 = 17/160 ≈ 10,6%. Nenhuma das opções A–D corresponde exatamente; a resposta correta é E — Nenhuma das anteriores.",
+    workedSolution:
+      "Total 2020 = 24 + 80 + 56 = 160 TWh. Total 2022 = 36 + 92 + 49 = 177 TWh. Variação % = (177 − 160) / 160 × 100 = 17/160 × 100 ≈ 10,6%. Nenhuma das opções A–D corresponde → E.",
+    steps: [
+      "Somar as fontes em 2020: 24 + 80 + 56 = 160 TWh.",
+      "Somar as fontes em 2022: 36 + 92 + 49 = 177 TWh.",
+      "Calcular a variação absoluta: 177 − 160 = 17 TWh.",
+      "Calcular a variação percentual: 17 ÷ 160 × 100 ≈ 10,6%.",
+      "10,6% não corresponde a nenhuma das opções A–D → resposta E.",
     ],
   },
 ];

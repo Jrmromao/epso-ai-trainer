@@ -48,9 +48,32 @@ export interface QuestionTable {
   rows: string[][];
 }
 
+// Difficulty levels modelled on what distinguishes EPSO question grades:
+// easy   — correct answer is clearly the best option; distractors are implausible
+//          or contain obvious absolute language.
+// medium — correct answer requires careful reading; distractors use real EPSO
+//          traps (scope swap, overreach) but are distinguishable with domain
+//          knowledge.
+// hard   — all options look defensible at first glance; requires precise recall
+//          of a specific threshold, article number, date or subtle scope detail
+//          to separate the correct answer from the best-looking distractor.
+export type Difficulty = "easy" | "medium" | "hard";
+
+// Language codes supported for question generation.
+// Field MCQ (AI topics) is always in English (Language 2 in the real exam).
+// Verbal and numerical reasoning should be in the candidate's Language 1.
+export type QuestionLanguage = "en" | "pt-PT";
+
+export const LANGUAGE_LABELS: Record<QuestionLanguage, string> = {
+  en: "English",
+  "pt-PT": "Português (PT)",
+};
+
 export interface BaseQuestion {
   id: string;
   topic: Topic;
+  difficulty: Difficulty;
+  language: QuestionLanguage;
   stem: string; // the question / passage prompt
   table?: QuestionTable; // optional data table (numerical reasoning)
   choices: Choices;

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { Topic } from "@/lib/types";
+import type { Difficulty, QuestionLanguage, Topic } from "@/lib/types";
 import { chatJson, getLlmConfig } from "@/lib/llm";
 import { buildGenerationPrompt, parseQuestions } from "@/lib/questionSchema";
 import { hardenQuestions } from "@/lib/hardenQuestions";
@@ -20,8 +20,18 @@ const VALID_TOPICS = new Set<Topic>([
   "numerical",
 ]);
 
-function fallback(topic: Topic, count: number) {
-  return SEED_QUESTIONS.filter((q) => q.topic === topic).slice(0, count);
+const VALID_DIFFICULTIES = new Set<Difficulty>(["easy", "medium", "hard"]);
+const VALID_LANGUAGES = new Set<QuestionLanguage>(["en", "pt-PT"]);
+
+// Field MCQ topics are always English (Language 2 in the real exam).
+const FIELD_TOPICS = new Set<Topic>(["ai-act", "ml-fundamentals", "genai-rag", "mlops", "trustworthy-ai", "policy"]);
+
+function fallback(topic: Topic, count: number, difficulty?: Difficulty) {
+  const filtered = SEED_QUESTIONS.filter(
+    (q) => q.topic === topic && (!difficulty || q.difficulty === difficulty),
+  );
+  // If no seed questions match the requested difficulty, fall back to any topic match.
+  return (filtered.length > 0 ? filtered : SEED_QUESTIONS.filter((q) => q.topic === topic)).slice(0, count);
 }
 
 export async function POST(req: Request) {
@@ -35,7 +45,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { topic?: string; count?: number; articleText?: string; harden?: boolean };
+  let body: { topic?: string; count?: number; articleText?: string; harden?: boolean; difficulty?: string; language?: string };
   try {
     body = await req.json();
   } catch {
@@ -44,24 +54,29 @@ export async function POST(req: Request) {
 
   const topic = body.topic as Topic;
   const count = Math.min(Math.max(Number(body.count) || 5, 1), 10);
-  // Lever 2 hardening pass is on by default; callers may opt out for speed.
   const harden = body.harden !== false;
+  const difficulty: Difficulty = VALID_DIFFICULTIES.has(body.difficulty as Difficulty)
+    ? (body.difficulty as Difficulty)
+    : "medium";
+  // Field MCQ is always English regardless of what the caller requests.
+  const requestedLanguage: QuestionLanguage = VALID_LANGUAGES.has(body.language as QuestionLanguage)
+    ? (body.language as QuestionLanguage)
+    : "en";
+  const language: QuestionLanguage = FIELD_TOPICS.has(topic) ? "en" : requestedLanguage;
 
   if (!VALID_TOPICS.has(topic)) {
     return NextResponse.json({ error: "unknown topic" }, { status: 400 });
   }
 
-  // Daily cost cap applies only to the server key. BYOK spends the user's own
-  // credits, so it is not capped. Over cap (server mode) -> seeded fallback.
   if (!byok && !tryConsumeLlmCall()) {
     return NextResponse.json({
-      questions: fallback(topic, count),
+      questions: fallback(topic, count, difficulty),
       source: "fallback",
       reason: "daily LLM limit reached",
     });
   }
 
-  const { system, user } = buildGenerationPrompt(topic, count, body.articleText);
+  const { system, user } = buildGenerationPrompt(topic, count, body.articleText, difficulty, language);
 
   try {
     const raw = await chatJson(
@@ -71,21 +86,16 @@ export async function POST(req: Request) {
       ],
       getLlmConfig(byokKey || undefined),
     );
-    const questions = parseQuestions(raw, topic);
+    const questions = parseQuestions(raw, topic, difficulty, language);
 
     if (questions.length === 0) {
-      // LLM returned nothing valid — degrade gracefully to seeded bank.
       return NextResponse.json({
-        questions: fallback(topic, count),
+        questions: fallback(topic, count, difficulty),
         source: "fallback",
         reason: "LLM output failed validation",
       });
     }
 
-    // Lever 2: optional self-critique pass to harden distractors. It is a second
-    // LLM call, so in server mode it consumes another cap slot; if the cap is
-    // exhausted (or BYOK is off) we simply skip it and return the first pass.
-    // hardenQuestions never returns fewer questions than it was given.
     let finalQuestions = questions;
     let hardened = false;
     if (harden && (byok || tryConsumeLlmCall())) {
@@ -97,11 +107,11 @@ export async function POST(req: Request) {
       hardened = finalQuestions !== questions;
     }
 
-    return NextResponse.json({ questions: finalQuestions, source: "llm", hardened });
+    return NextResponse.json({ questions: finalQuestions, source: "llm", hardened, difficulty, language });
   } catch (err) {
     const message = err instanceof Error ? err.message : "generation failed";
     return NextResponse.json({
-      questions: fallback(topic, count),
+      questions: fallback(topic, count, difficulty),
       source: "fallback",
       reason: message,
     });
