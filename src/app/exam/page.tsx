@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Question } from "@/lib/types";
+import type { Difficulty, Question } from "@/lib/types";
 import ExamRunner from "@/components/ExamRunner";
 import { llmHeaders } from "@/lib/userKey";
 
@@ -13,10 +13,20 @@ interface ExamData {
   source: string;
 }
 
+type DifficultyMode = Difficulty | "mix";
+
+const DIFFICULTY_OPTIONS: { value: DifficultyMode; label: string; description: string }[] = [
+  { value: "easy",   label: "Easy",   description: "Core concepts, clear distractors" },
+  { value: "medium", label: "Medium", description: "EPSO-style traps, requires domain knowledge" },
+  { value: "hard",   label: "Hard",   description: "All options defensible, precise recall needed" },
+  { value: "mix",    label: "Mix",    description: "10 easy · 10 medium · 10 hard" },
+];
+
 export default function ExamPage() {
   const [exam, setExam] = useState<ExamData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [difficultyMode, setDifficultyMode] = useState<DifficultyMode>("mix");
 
   async function start() {
     setLoading(true);
@@ -24,7 +34,8 @@ export default function ExamPage() {
     try {
       const res = await fetch("/api/exam", {
         method: "POST",
-        headers: llmHeaders(),
+        headers: llmHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ difficulty: difficultyMode }),
       });
       if (res.status === 401) {
         setError(
@@ -77,7 +88,31 @@ export default function ExamPage() {
         <li>Per-question pace indicator (~80s target)</li>
         <li>Pass mark: 15/30</li>
       </ul>
-      <p className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+
+      {/* Difficulty selector */}
+      <div className="mt-5">
+        <p className="text-sm font-medium text-neutral-700">Difficulty</p>
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {DIFFICULTY_OPTIONS.map(({ value, label, description }) => (
+            <button
+              key={value}
+              onClick={() => setDifficultyMode(value)}
+              className={`rounded-lg border p-3 text-left transition ${
+                difficultyMode === value
+                  ? "border-neutral-900 bg-neutral-900 text-white"
+                  : "border-neutral-300 bg-white hover:border-neutral-900"
+              }`}
+            >
+              <div className="font-semibold text-sm">{label}</div>
+              <div className={`mt-0.5 text-xs ${difficultyMode === value ? "text-neutral-300" : "text-neutral-500"}`}>
+                {description}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className="mt-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
         Questions are generated live &mdash; this takes ~30&ndash;60 seconds and
         requires an unlocked session (enter your access code on the home page).
       </p>
