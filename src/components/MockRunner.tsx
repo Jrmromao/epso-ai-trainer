@@ -21,11 +21,11 @@ import QuestionTableView from "@/components/QuestionTableView";
 const SECONDS_PER_QUESTION = 80;
 const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D", "E"];
 
-// Difficulty badge styling
+// Difficulty badge — full static class strings so Tailwind doesn't purge them.
 const DIFFICULTY_BADGE: Record<Difficulty, { label: string; cls: string }> = {
-  easy:   { label: "Easy",   cls: "bg-green-100 text-green-800 border-green-200" },
-  medium: { label: "Medium", cls: "bg-amber-100 text-amber-800 border-amber-200" },
-  hard:   { label: "Hard",   cls: "bg-red-100 text-red-800 border-red-200" },
+  easy:   { label: "Easy",   cls: "bg-green-100 text-green-800 border border-green-200" },
+  medium: { label: "Medium", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
+  hard:   { label: "Hard",   cls: "bg-red-100 text-red-800 border border-red-200" },
 };
 
 // Flag reasons — stored in localStorage under "flagged_questions"

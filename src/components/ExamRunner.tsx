@@ -5,6 +5,7 @@ import {
   type AnswerRecord,
   type AssessmentResult,
   type ChoiceKey,
+  type Difficulty,
   type Question,
   isNumerical,
 } from "@/lib/types";
@@ -15,7 +16,14 @@ import { llmHeaders } from "@/lib/userKey";
 
 const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D", "E"];
 const PASS_MARK = 15;
-const PER_Q_TARGET = 80; // soft pace target in seconds
+const PER_Q_TARGET = 80;
+
+// Full static class strings so Tailwind doesn't purge them.
+const DIFFICULTY_BADGE: Record<Difficulty, { label: string; cls: string }> = {
+  easy:   { label: "Easy",   cls: "bg-green-100 text-green-800 border border-green-200" },
+  medium: { label: "Medium", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
+  hard:   { label: "Hard",   cls: "bg-red-100 text-red-800 border border-red-200" },
+};
 
 function fmt(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -167,11 +175,14 @@ export default function ExamRunner({
                   <p className="whitespace-pre-line text-sm font-medium">
                     {i + 1}. {q.stem}
                   </p>
-                  <span
-                    className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${badge}`}
-                  >
-                    {skipped ? "Skipped" : gotIt ? "Correct" : "Wrong"}
-                  </span>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${DIFFICULTY_BADGE[q.difficulty].cls}`}>
+                      {DIFFICULTY_BADGE[q.difficulty].label}
+                    </span>
+                    <span className={`rounded px-2 py-0.5 text-xs font-semibold ${badge}`}>
+                      {skipped ? "Skipped" : gotIt ? "Correct" : "Wrong"}
+                    </span>
+                  </div>
                 </div>
 
                 <ul className="mt-2 space-y-1 text-sm">
@@ -252,7 +263,12 @@ export default function ExamRunner({
       </div>
 
       {/* Question */}
-      <p className="mt-5 whitespace-pre-line font-medium">{current.stem}</p>
+      <div className="mt-4 flex items-center gap-2">
+        <span className={`rounded px-2 py-0.5 text-xs font-medium ${DIFFICULTY_BADGE[current.difficulty].cls}`}>
+          {DIFFICULTY_BADGE[current.difficulty].label}
+        </span>
+      </div>
+      <p className="mt-2 whitespace-pre-line font-medium">{current.stem}</p>
       <div className="mt-4 space-y-2">
         {CHOICE_KEYS.map((k) => {
           const label = current.choices[k];
