@@ -275,69 +275,84 @@ export function buildGenerationPrompt(
 }
 
 // EPSO Verbal Reasoning — Reading Comprehension format.
-// Modelled on real EPSO items (e.g. EN2360V): a self-contained factual passage
-// followed by the fixed stem "Which of the following statements is correct?"
-// with four full-sentence options. Exactly one is a faithful, understated
-// paraphrase of the passage; the other three each apply a named distractor
-// trap. Answerable from the passage ALONE — no outside knowledge.
+// Modelled on real EPSO items (e.g. PT2309rV, EN2360V): a dense, formally
+// written factual passage in EU bureaucratic register, followed by
+// "Which of the following statements is correct?" with four full-sentence
+// options. Answerable from the passage ALONE.
 function buildReadingComprehensionPrompt(count: number, difficulty: Difficulty = "medium", language: QuestionLanguage = "en"): {
   system: string;
   user: string;
 } {
-  // Difficulty modulates passage complexity and how close the distractors are
-  // to the correct answer.
   const difficultyNote =
     difficulty === "easy"
-      ? " DIFFICULTY: EASY. Use a short, clear passage (4-5 sentences). Distractors" +
-        " should use obvious traps (clear overreach or simple negation flip) that a" +
-        " careful reader can reject quickly. The correct answer is clearly the most" +
-        " faithful paraphrase."
+      ? " DIFFICULTY: EASY. Use a passage of 5-6 sentences. Sentence structure" +
+        " should be clear but formal. Distractors use obvious traps (clear overreach" +
+        " or simple negation flip) that a careful reader can reject quickly."
       : difficulty === "hard"
-        ? " DIFFICULTY: HARD. Use a denser passage (6-8 sentences) with multiple" +
-          " related facts and qualifiers. Distractors must closely mirror passage" +
-          " wording, swapping subtle details (a small quantity, a qualifier like" +
-          " 'some' vs 'most', a specific condition). The correct answer should be" +
-          " genuinely hard to separate from the best distractor without re-reading" +
-          " the passage carefully."
-        : " DIFFICULTY: MEDIUM. Use a passage of 5-7 sentences. Distractors use" +
-          " standard EPSO traps (scope swap, overreach, belief-as-fact) but are" +
-          " distinguishable with careful reading.";
+        ? " DIFFICULTY: HARD. Use a dense passage of 8-10 sentences with multiple" +
+          " subordinate clauses, qualifiers ('in most cases', 'under certain" +
+          " conditions', 'it is estimated that') and several related facts that" +
+          " are easy to confuse. Distractors must closely mirror passage wording," +
+          " swapping a single subtle detail (a quantity, a qualifier, a scope word," +
+          " a frequency). The correct answer should require re-reading at least one" +
+          " sentence carefully."
+        : " DIFFICULTY: MEDIUM. Use a passage of 6-8 sentences with formal register" +
+          " and some subordinate clauses. Distractors use standard EPSO traps" +
+          " (scope swap, overreach, belief-as-fact) but are distinguishable with" +
+          " careful reading.";
 
   const languageNote =
     language !== "en"
-      ? ` IMPORTANT: Write the entire question — passage, question line, all four answer options, and the explanation — in ${language === "pt-PT" ? "European Portuguese (Portugal variant — not Brazilian Portuguese). Use European Portuguese vocabulary, spelling (post-2009 Acordo Ortográfico), and phrasing." : language}.`
+      ? ` IMPORTANT: Write the entire question — passage, question line, all four answer options, and the explanation — in ${language === "pt-PT" ? "European Portuguese (Portugal variant — not Brazilian Portuguese). Use European Portuguese vocabulary, spelling (post-2009 Acordo Ortográfico), and formal administrative register matching official EU documents translated into Portuguese." : language}.`
       : "";
+
+  const registerNote =
+    "REGISTER AND STYLE (critical): The passage must read like an extract from " +
+    "an official EU publication, scientific report, or encyclopaedia entry — NOT " +
+    "like a school textbook or a news article. Use formal, impersonal prose with " +
+    "subordinate clauses, passive constructions, hedging language ('it is estimated " +
+    "that', 'in most cases', 'under certain conditions', 'studies suggest'), and " +
+    "precise qualifiers. Sentences should be 25-40 words on average. The passage " +
+    "must contain multiple facts that are easy to confuse under time pressure — " +
+    "numbers, proportions, geographic scope, conditions, and direction of effects. " +
+    "Topics: science, public health, environmental policy, economic statistics, " +
+    "geography, history, EU administration, technology policy — NOT AI or the " +
+    "candidate's field of expertise.";
 
   const system =
     "You are a senior EPSO test author writing VERBAL REASONING " +
     "(reading-comprehension) items for an EU competition. Each item has:\n" +
-    "1) A self-contained factual passage of 4-8 sentences on a NEUTRAL topic " +
-    "(science, geography, history, administration, nature, technology) — NOT " +
-    "about AI or the candidate's field. The passage must contain all facts " +
-    "needed and require no outside knowledge.\n" +
+    "1) A self-contained factual passage on a NEUTRAL topic in formal EU register " +
+    "(see REGISTER AND STYLE below). The passage must contain all facts needed " +
+    "and require no outside knowledge.\n" +
     "2) The passage goes in the \"stem\", followed by a blank line and the exact " +
-    "question: \"Which of the following statements is correct?\"\n" +
+    (language === "pt-PT"
+      ? "question: \"Qual das seguintes afirmações está correta?\"\n"
+      : "question: \"Which of the following statements is correct?\"\n") +
     "3) Exactly four full-sentence options A-D. EXACTLY ONE is correct.\n\n" +
     "THE CORRECT OPTION must be an understated, LITERAL paraphrase of something " +
     "the passage explicitly states — never stronger, wider or more absolute than " +
-    "the text.\n\n" +
+    "the text. It should sound plausible but not stand out as obviously correct.\n\n" +
     "THE THREE DISTRACTORS must each be plausible and each use ONE of these named " +
     "EPSO traps (use a mix; do not reuse the same trap for all three):\n" +
     "- OVERREACH/ABSOLUTE: turns a qualified statement into an absolute the text " +
     "never makes (e.g. 'limited' -> 'no other', 'resilient' -> 'cannot be killed').\n" +
     "- SCOPE/QUANTITY SWAP: distorts a number, frequency or geographic/logical " +
     "scope (e.g. a region -> 'the whole country', 'currently in use' -> 'carried " +
-    "out each year').\n" +
-    "- BELIEF-AS-FACT: presents an opinion/doubt reported in the passage as if it " +
-    "were an established fact.\n" +
+    "out each year', '50%' -> 'the majority').\n" +
+    "- BELIEF-AS-FACT: presents an opinion, doubt or reported belief in the passage " +
+    "as if it were an established fact.\n" +
     "- UNSTATED CAUSAL LINK: asserts a cause-effect relationship the passage does " +
     "not make.\n" +
     "- NEGATION FLIP: reverses or negates what the passage actually says.\n\n" +
     "Distractors must be WRONG strictly against the passage — never true-but-" +
-    "unstated trivia. Do NOT use 'all of the above' or throwaway options.\n\n" +
-    "The \"explanation\" must: state why the correct option is the faithful " +
-    "paraphrase, then for EACH distractor name its trap type and quote the passage " +
-    "wording it distorts.\n\n" +
+    "unstated trivia. Each distractor should look correct at a glance. " +
+    "Do NOT use 'all of the above' or throwaway options.\n\n" +
+    "The \"explanation\" must: (a) identify the sentence(s) in the passage that " +
+    "support the correct answer and explain why it is the faithful paraphrase; " +
+    "(b) for EACH distractor, name its trap type in CAPITALS and quote the exact " +
+    "passage wording it distorts.\n\n" +
+    registerNote + "\n\n" +
     'Each question object MUST include a "difficulty" field set to "' + difficulty + '" and a "language" field set to "' + language + '".\n\n' +
     "Output ONLY a JSON object of the form " +
     '{"questions":[{"stem":string,"choices":{"A":string,"B":string,"C":string,' +
