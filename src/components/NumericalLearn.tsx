@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { type ChoiceKey, type Question, isNumerical } from "@/lib/types";
 import Calculator from "@/components/Calculator";
 import QuestionTableView from "@/components/QuestionTableView";
-import QuestionChartView from "@/components/QuestionChartView";
 
 // Untimed numerical LEARN mode. Deliberate practice: pick an answer with no
 // timer, then reveal the worked solution ONE step at a time. It teaches the
@@ -65,7 +64,6 @@ export default function NumericalLearn({ questions }: { questions: Question[] })
       <p className="mt-3 whitespace-pre-line font-medium">{current.stem}</p>
 
       {current.table && <QuestionTableView table={current.table} />}
-      {current.chart && <QuestionChartView chart={current.chart} />}
 
       <div className="mt-3">
         <button

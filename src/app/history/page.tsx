@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import TestReviewPanel from "@/components/TestReviewPanel";
+import ProgressChart from "@/components/ProgressChart";
 
 // Dedicated test-history page. Lists every completed mock/exam; opening one
 // shows wrong answers + the correct answer + explanation. A ?test=<id> query
@@ -23,6 +24,7 @@ function HistoryContent() {
         wrong answers, the correct answer, and the explanation — no note-taking
         during the test.
       </p>
+      <ProgressChart />
       <TestReviewPanel initialId={testId} />
     </main>
   );
