@@ -20,7 +20,11 @@ function Shape({ el, cx, cy, size }: { el: Element; cx: number; cy: number; size
         <rect x={cx - r} y={cy - r} width={size} height={size} fill={fillColor} stroke={stroke} strokeWidth={sw} />
       );
     case "triangle": {
-      const pts = `${cx},${cy - r} ${cx + r},${cy + r} ${cx - r},${cy + r}`;
+      // honour `tri` orientation (up default, down if set)
+      const down = el.tri === "down";
+      const pts = down
+        ? `${cx},${cy + r} ${cx + r},${cy - r} ${cx - r},${cy - r}`
+        : `${cx},${cy - r} ${cx + r},${cy + r} ${cx - r},${cy + r}`;
       return <polygon points={pts} fill={fillColor} stroke={stroke} strokeWidth={sw} />;
     }
     case "diamond": {
@@ -29,9 +33,33 @@ function Shape({ el, cx, cy, size }: { el: Element; cx: number; cy: number; size
     }
     case "arrow":
       return <Arrow dir={el.direction ?? "up"} cx={cx} cy={cy} size={size} />;
+    case "pie":
+      return <Pie quarter={el.quarter ?? 0} cx={cx} cy={cy} r={r} />;
     default:
       return null;
   }
+}
+
+// A quarter-filled circle. `quarter` 0..3 selects which 90° wedge is filled,
+// clockwise starting from the top-right (12 o'clock to 3 o'clock = 0).
+function Pie({ quarter, cx, cy, r }: { quarter: number; cx: number; cy: number; r: number }) {
+  const stroke = "#111827";
+  // wedge from angle a0 to a1 (degrees, 0 = up, clockwise)
+  const a0 = quarter * 90;
+  const a1 = a0 + 90;
+  const toXY = (deg: number) => {
+    const rad = ((deg - 90) * Math.PI) / 180; // -90 so 0deg points up
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  };
+  const [x0, y0] = toXY(a0);
+  const [x1, y1] = toXY(a1);
+  const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y1} Z`;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={stroke} strokeWidth={2} />
+      <path d={d} fill="#111827" />
+    </g>
+  );
 }
 
 function Arrow({ dir, cx, cy, size }: { dir: Direction; cx: number; cy: number; size: number }) {
@@ -199,6 +227,23 @@ function CurvesPanel({ curves }: { curves: { y: number; flip: boolean }[] }) {
   );
 }
 
+// COMPOSITE3: three independent rows of elements stacked vertically.
+function Composite3Panel({ rows }: { rows: Element[][] }) {
+  const sz = 15;
+  return (
+    <>
+      {rows.map((row, r) => {
+        const cy = ((r + 1) / (rows.length + 1)) * BOX;
+        const n = row.length;
+        return row.map((el, c) => {
+          const cx = ((c + 1) / (n + 1)) * BOX;
+          return <Shape key={`${r}-${c}`} el={el} cx={cx} cy={cy} size={sz} />;
+        });
+      })}
+    </>
+  );
+}
+
 export default function AbstractPanel({ panel, size = 96 }: { panel: Panel; size?: number }) {
   const uid = `seg-${Math.abs(hashPanel(panel))}`;
 
@@ -209,6 +254,8 @@ export default function AbstractPanel({ panel, size = 96 }: { panel: Panel; size
     body = <SegmentsPanel segments={panel.segments ?? []} dotPos={panel.dotPos} uid={uid} />;
   } else if (panel.layout === "curves") {
     body = <CurvesPanel curves={panel.curves ?? []} />;
+  } else if (panel.layout === "composite3") {
+    body = <Composite3Panel rows={panel.rows ?? []} />;
   } else {
     const positions = slotPositions(panel.layout, panel.slots.length);
     const sz = shapeSize(panel.layout);

@@ -17,18 +17,21 @@ export type ShapeKind =
   | "square"
   | "triangle"
   | "diamond"
-  | "arrow";
+  | "arrow"
+  | "pie"; // quarter-filled circle; the filled quarter is set by `quarter`
 
 export type Fill = "solid" | "outline";
 
 export type Direction = "up" | "down" | "left" | "right";
 
 // One drawable element with its attributes. Not all attributes apply to every
-// shape (arrows use `direction`; others use `fill`).
+// shape (arrows use `direction`; pies use `quarter`; others use `fill`).
 export interface Element {
   shape: ShapeKind;
   fill: Fill;
   direction?: Direction; // only for arrows
+  quarter?: number; // 0..3 — which quarter of a pie-circle is filled (clockwise from top-right)
+  tri?: "up" | "down"; // triangle orientation (for composite rows)
 }
 
 // A panel is a fixed layout of positioned slots, each holding one element
@@ -38,6 +41,7 @@ export interface Element {
 // - "count": draw `count` identical dots (element-progression pattern)
 // - "segments": an 8-segment square, each segment with a fill pattern
 // - "curves": 2-3 curved lines positioned in the box
+// - "composite3": three independent rows of elements (EPSO Q8 format)
 export type PanelLayout =
   | "single"
   | "row3"
@@ -45,7 +49,8 @@ export type PanelLayout =
   | "stack2"
   | "count"
   | "segments"
-  | "curves";
+  | "curves"
+  | "composite3";
 
 // Segment fill patterns for the 8-segment square (EPSO Q4 format).
 export type SegPattern = "blank" | "solid" | "dots" | "lines" | "checker";
@@ -56,6 +61,8 @@ export interface Panel {
   // count layout:
   count?: number;
   countShape?: ShapeKind;
+  // composite3 layout: three rows, each an array of elements
+  rows?: Element[][];
   // segments layout: 8 patterns (clockwise from top-left triangle) + optional dot position 0..7
   segments?: SegPattern[];
   dotPos?: number;
@@ -256,7 +263,13 @@ function dirName(d: Direction): string {
 
 function sameElement(a: Element | null, b: Element | null): boolean {
   if (!a || !b) return a === b;
-  return a.shape === b.shape && a.fill === b.fill && a.direction === b.direction;
+  return (
+    a.shape === b.shape &&
+    a.fill === b.fill &&
+    a.direction === b.direction &&
+    a.quarter === b.quarter &&
+    a.tri === b.tri
+  );
 }
 
 function clonePanel(p: Panel): Panel {
@@ -265,6 +278,7 @@ function clonePanel(p: Panel): Panel {
     slots: p.slots.map((s) => (s ? { ...s } : null)),
     ...(p.count !== undefined ? { count: p.count } : {}),
     ...(p.countShape ? { countShape: p.countShape } : {}),
+    ...(p.rows ? { rows: p.rows.map((r) => r.map((e) => ({ ...e }))) } : {}),
     ...(p.segments ? { segments: p.segments.slice() } : {}),
     ...(p.dotPos !== undefined ? { dotPos: p.dotPos } : {}),
     ...(p.curves ? { curves: p.curves.map((c) => ({ ...c })) } : {}),
@@ -344,6 +358,15 @@ function nudgePanel(p: Panel, salt: number): Panel {
     out.curves[i] = { ...out.curves[i], flip: !out.curves[i].flip };
     return out;
   }
+  if (out.layout === "composite3" && out.rows) {
+    // flip the fill of the first element in a row chosen by salt
+    const r = salt % out.rows.length;
+    if (out.rows[r].length > 0) {
+      const e = out.rows[r][0];
+      out.rows[r][0] = { ...e, fill: e.fill === "solid" ? "outline" : "solid" };
+    }
+    return out;
+  }
 
   const slotIdx = out.slots.findIndex((s) => s);
   if (slotIdx === -1) return out;
@@ -365,6 +388,11 @@ function panelsEqual(a: Panel, b: Panel): boolean {
   if (a.layout !== b.layout) return false;
   // Specialised layouts compare their structured data.
   if (a.layout === "count") return a.count === b.count && a.countShape === b.countShape;
+  if (a.layout === "composite3") {
+    const ar = a.rows ?? [], br = b.rows ?? [];
+    if (ar.length !== br.length) return false;
+    return ar.every((row, r) => row.length === br[r].length && row.every((e, i) => sameElement(e, br[r][i])));
+  }
   if (a.layout === "segments") {
     if (a.dotPos !== b.dotPos) return false;
     const as = a.segments ?? [], bs = b.segments ?? [];
@@ -661,6 +689,81 @@ function genCurves(rng: () => number, id: string): AbstractQuestion {
 
 // ----------------------------------------------------------------------------
 // Public API
+// MEDIUM template: PIE-CIRCLE ROTATION (EPSO Q9 corner element). A row of three
+// quarter-filled circles; the filled quarter rotates by one position each step.
+function genPieRotation(rng: () => number, id: string): AbstractQuestion {
+  const step = pick(rng, [1, -1]);
+  // three pies with different starting quarters, all rotating together
+  const starts = [0, 1, 2].map(() => Math.floor(rng() * 4));
+  const panelFor = (i: number): Panel => ({
+    layout: "row3",
+    slots: starts.map((q) => ({ shape: "pie", fill: "solid", quarter: ((q + i * step) % 4 + 4) % 4 } as Element)),
+  });
+  const sequence = [0, 1, 2, 3, 4].map(panelFor);
+  const correct = panelFor(5);
+  const distractors: Panel[] = [];
+  // one pie rotated wrong
+  { const p = clonePanel(correct); const e = p.slots[0]!; p.slots[0] = { ...e, quarter: ((e.quarter! + 1) % 4) }; distractors.push(p); }
+  // all rotated one extra (whole panel = next step)
+  distractors.push(panelFor(6));
+  // repeat previous
+  distractors.push(panelFor(4));
+  // middle pie rotated opposite
+  { const p = clonePanel(correct); const e = p.slots[1]!; p.slots[1] = { ...e, quarter: ((e.quarter! + 2) % 4) }; distractors.push(p); }
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "medium", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary: `Each quarter-filled circle rotates its filled quarter 90° ${step === 1 ? "clockwise" : "anticlockwise"} per step. All three rotate together.`,
+  };
+}
+
+// HARD template: 3-ROW COMPOSITE (EPSO Q8 format). Three independent rows:
+// top = a row of circles whose COUNT increases/decreases; middle = triangles
+// whose ORIENTATION alternates up/down; bottom = circles whose FILL alternates.
+// Three rules run at once.
+function genComposite3(rng: () => number, id: string): AbstractQuestion {
+  const topStep = pick(rng, [1, -1]);
+  const topStart = topStep === 1 ? 1 : 4; // keep 1..4 circles
+  const triStartUp = rng() < 0.5;
+  const botFillStart: Fill = pick(rng, ["solid", "outline"] as Fill[]);
+
+  const rowCircles = (n: number, fill: Fill): Element[] =>
+    Array.from({ length: Math.max(1, n) }, () => ({ shape: "circle", fill }));
+  const rowTriangles = (up: boolean): Element[] =>
+    Array.from({ length: 3 }, () => ({ shape: "triangle", fill: "solid", tri: up ? "up" : "down" }));
+
+  const panelFor = (i: number): Panel => ({
+    layout: "composite3",
+    slots: [],
+    rows: [
+      rowCircles(topStart + i * topStep, "outline"),
+      rowTriangles(triStartUp ? i % 2 === 0 : i % 2 === 1),
+      rowCircles(3, i % 2 === 0 ? botFillStart : botFillStart === "solid" ? "outline" : "solid"),
+    ],
+  });
+
+  const sequence = [0, 1, 2, 3, 4].map(panelFor);
+  const correct = panelFor(5);
+
+  const distractors: Panel[] = [];
+  // 1) top-row count wrong
+  { const p = clonePanel(correct); p.rows![0] = rowCircles((p.rows![0].length) + 1, "outline"); distractors.push(p); }
+  // 2) middle-row triangles flipped
+  { const p = clonePanel(correct); p.rows![1] = p.rows![1].map((e) => ({ ...e, tri: e.tri === "up" ? "down" : "up" })); distractors.push(p); }
+  // 3) bottom-row fill wrong
+  { const p = clonePanel(correct); p.rows![2] = p.rows![2].map((e) => ({ ...e, fill: e.fill === "solid" ? "outline" : "solid" })); distractors.push(p); }
+  // 4) repeat previous panel
+  distractors.push(panelFor(4));
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "hard", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary:
+      "Three independent rows run at once: the top row of circles changes in COUNT, the middle row of triangles alternates ORIENTATION (up/down), and the bottom row of circles alternates FILL. All three must be right.",
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Public API
 // ----------------------------------------------------------------------------
 type Generator = (rng: () => number, id: string) => AbstractQuestion;
 
@@ -678,12 +781,14 @@ const TEMPLATES: Record<AbstractDifficulty, Generator[]> = {
     (rng, id) => genProgression(rng, id, "medium"),
     (rng, id) => genReflection(rng, id, "medium"),
     genCurves,
+    genPieRotation,
   ],
   hard: [
     genHard,
     genHardFlipTravel,
     (rng, id) => genReflection(rng, id, "hard"),
     genSegments,
+    genComposite3,
   ],
 };
 
