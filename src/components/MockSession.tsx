@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import type { Question, Topic } from "@/lib/types";
+import type { Difficulty, Question, QuestionLanguage, Topic } from "@/lib/types";
+import { LANGUAGE_LABELS } from "@/lib/types";
 import MockRunner from "@/components/MockRunner";
 import NumericalLearn from "@/components/NumericalLearn";
 import { llmHeaders } from "@/lib/userKey";
 
-// Client wrapper around MockRunner. Lets the user run the seeded bank OR
-// generate fresh questions via /api/generate (spec AC5). Keyed remount
-// restarts the runner cleanly when the question set changes.
+// Topics where Language 1 (pt-PT) is relevant — reasoning tests only.
+// Field MCQ is always English (Language 2 in the real exam).
+const REASONING_TOPICS = new Set<Topic>(["verbal", "verbal-rc", "numerical"]);
 
 export default function MockSession({
   topic,
@@ -23,12 +24,12 @@ export default function MockSession({
   const [articleText, setArticleText] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  // Lever 2: harder questions via a self-critique pass. On by default; can be
-  // turned off for faster generation.
   const [harden, setHarden] = useState(true);
-  // Numerical only: switch between the timed mock and the untimed step-by-step
-  // learn mode. Learn mode is off by default (timed practice is the priority).
   const [learnMode, setLearnMode] = useState(false);
+  const [difficulty, setDifficulty] = useState<Difficulty>("medium");
+  const [language, setLanguage] = useState<QuestionLanguage>("en");
+
+  const isReasoning = REASONING_TOPICS.has(topic);
 
   async function generate() {
     setLoading(true);
@@ -41,6 +42,8 @@ export default function MockSession({
           topic,
           count,
           harden,
+          difficulty,
+          language: isReasoning ? language : "en",
           articleText: articleText.trim() || undefined,
         }),
       });
@@ -98,6 +101,39 @@ export default function MockSession({
               </option>
             ))}
           </select>
+
+          {/* Difficulty selector */}
+          <label className="text-sm text-neutral-600">Difficulty:</label>
+          <select
+            className="rounded border border-neutral-300 px-2 py-1"
+            value={difficulty}
+            onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+          >
+            <option value="easy">🟢 Easy</option>
+            <option value="medium">🟡 Medium</option>
+            <option value="hard">🔴 Hard</option>
+          </select>
+
+          {/* Language picker — reasoning topics only */}
+          {isReasoning && (
+            <>
+              <label className="text-sm text-neutral-600">Language:</label>
+              <select
+                className="rounded border border-neutral-300 px-2 py-1"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as QuestionLanguage)}
+              >
+                {(Object.entries(LANGUAGE_LABELS) as [QuestionLanguage, string][]).map(
+                  ([code, label]) => (
+                    <option key={code} value={code}>
+                      {label}
+                    </option>
+                  ),
+                )}
+              </select>
+            </>
+          )}
+
           <button
             onClick={generate}
             disabled={loading}
