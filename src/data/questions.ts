@@ -515,7 +515,7 @@ export const SEED_QUESTIONS: Question[] = [
       B: "8,1%",
       C: "11,3%",
       D: "14,4%",
-      E: "Nenhuma das anteriores",
+      E: "Impossível responder",
     },
     answer: "B",
     explanation:

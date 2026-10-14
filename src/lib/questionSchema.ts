@@ -402,42 +402,62 @@ function buildNumericalPrompt(count: number, difficulty: Difficulty = "medium", 
       ? ` IMPORTANT: Write the table caption, column headers, stem, all answer options, explanation, workedSolution, and steps entirely in ${language === "pt-PT" ? "European Portuguese (Portugal variant — not Brazilian Portuguese). Use European Portuguese vocabulary, spelling (post-2009 Acordo Ortográfico), and phrasing. Keep numeric values as numbers." : language}.`
       : "";
 
+  // Option E label depends on language — matches the real TAO interface.
+  const optionE = language === "pt-PT" ? "Impossível responder" : "Cannot be determined";
+
+  const tableNote =
+    "TABLE DESIGN (critical — match real EPSO format): Use realistic, multi-column " +
+    "tables modelled on EU statistical publications (Eurostat, OECD). " +
+    "The table should have 4-7 columns and 3-6 rows. Include a mix of column types: " +
+    "at least one year-pair (e.g. 2000 / 2003), one percentage column, one absolute " +
+    "value column (millions EUR, thousands of people, GWh, etc.), and optionally a " +
+    "per-capita or ratio column. Country/region names or sector names as row labels. " +
+    "NOT every value needs to be used — include decoy columns that distract. " +
+    "The question should require the candidate to DERIVE a value (ratio, compound " +
+    "growth, share of total, per-capita from total + population) rather than just " +
+    "read a cell directly. At least one question per batch should have E as the " +
+    "correct answer because the exact result does not match any of A-D.";
+
   const system =
     "You are a senior EPSO test author writing NUMERICAL REASONING items for an " +
     "EU competition. Each item MUST have:\n" +
     "1) A \"table\" object: {\"caption\":string,\"headers\":string[]," +
-    "\"rows\":string[][]} holding realistic figures (percentages, currency, " +
-    "counts) across a few categories/years. Every row must have the same number " +
-    "of cells as there are headers.\n" +
-    "2) A \"stem\": a question requiring a calculation FROM the table (growth %, " +
-    "ratio, per-capita, share, difference, etc.). Do not restate the whole table " +
-    "in the stem.\n" +
-    "3) FIVE options A-E. Options A-D are numeric/textual candidates; option E " +
-    "MUST be exactly \"None of the above\". Exactly one option is correct — and " +
-    "it may legitimately be E when none of A-D match.\n" +
+    "\"rows\":string[][]} — see TABLE DESIGN below. Every row must have the same " +
+    "number of cells as there are headers.\n" +
+    "2) A \"stem\": a question requiring a multi-step calculation FROM the table " +
+    "(ratio, compound growth %, per-capita, share of total, derived index). " +
+    "Do not restate the whole table in the stem. Ask one precise question.\n" +
+    "3) FIVE options A-E. Options A-D are numeric or ratio candidates; option E " +
+    `MUST be exactly "${optionE}". Exactly one option is correct — E is correct ` +
+    "when the exact answer does not match any of A-D.\n" +
     "4) \"answer\": the correct letter A-E.\n" +
-    "5) \"explanation\": why the answer is correct.\n" +
-    "6) \"workedSolution\": the full calculation as one string.\n" +
-    "7) \"steps\": an ordered array of short, discrete calculation steps (one " +
-    "operation each) that build to the answer, for revealing one at a time.\n" +
+    "5) \"explanation\": why the answer is correct, with the key calculation shown.\n" +
+    "6) \"workedSolution\": the full step-by-step calculation as one string.\n" +
+    "7) \"steps\": an ordered array of short discrete calculation steps for " +
+    "step-by-step reveal in learn mode.\n" +
     '8) "difficulty": set to "' + difficulty + '".\n' +
     '9) "language": set to "' + language + '".\n\n' +
-    "Distractors must be the results of PLAUSIBLE mistakes (wrong base year, " +
-    "forgetting to subtract, off-by-a-factor), not random numbers.\n\n" +
+    "Distractors A-D must be the results of PLAUSIBLE mistakes: wrong base year, " +
+    "inverting a ratio, forgetting to convert units, using the wrong column, " +
+    "rounding at the wrong step. They must be numerically close to the correct " +
+    "answer — not random numbers.\n\n" +
+    tableNote + "\n\n" +
     "Output ONLY a JSON object of the form " +
     '{"questions":[{"table":{"caption":string,"headers":string[],"rows":string[][]},' +
     '"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string,"E":string},' +
-    '"answer":"A"|"B"|"C"|"D"|"E","difficulty":"easy"|"medium"|"hard","language":string,"explanation":string,"workedSolution":string,' +
-    '"steps":string[]}]}. No prose outside the JSON.' +
+    '"answer":"A"|"B"|"C"|"D"|"E","difficulty":"easy"|"medium"|"hard","language":string,' +
+    '"explanation":string,"workedSolution":string,"steps":string[]}]}. ' +
+    "No prose outside the JSON." +
     difficultyNote +
     ANTI_TELL_RULES +
     languageNote;
 
   const user =
     `Generate ${count} ${difficulty}-difficulty EPSO numerical reasoning questions, each based on its own ` +
-    "data table. Vary the scenarios (economics, demographics, R&D, energy, " +
-    "transport). Randomise which option letter is correct, and make E (\"None of " +
-    "the above\") the correct answer for at least one question when appropriate.";
+    "multi-column data table. Vary the scenarios (R&D expenditure, demographics, " +
+    "energy production, trade statistics, public health, transport). " +
+    `Make E ("${optionE}") the correct answer for at least one question. ` +
+    "Randomise which option letter is correct across the set.";
 
   return { system, user };
 }
