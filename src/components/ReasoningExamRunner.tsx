@@ -30,6 +30,13 @@ const SECTION_BUDGET: Record<Section, number> = {
   numerical: SECONDS_PER_QUESTION.numerical,
   abstract: SECONDS_PER_QUESTION.abstract,
 };
+// Official notice (Quadro 3): each section has its OWN time limit — you cannot
+// borrow time between sections. Verbal 35 min, numerical 20 min, abstract 10 min.
+const SECTION_DURATION: Record<Section, number> = {
+  verbal: 35 * 60,
+  numerical: 20 * 60,
+  abstract: 10 * 60,
+};
 
 function fmt(sec: number): string {
   const m = Math.floor(Math.max(0, sec) / 60);
@@ -56,9 +63,9 @@ export default function ReasoningExamRunner() {
   const [qIdx, setQIdx] = useState(0);
   // Answers stored per question: key `${sectionIdx}:${qIdx}` -> option index.
   const [answers, setAnswers] = useState<Record<string, number>>({});
-  // Overall test timer (counts down across the whole 40) + per-question elapsed
-  // timer (counts up, a soft pace indicator, resets per question).
-  const [overallLeft, setOverallLeft] = useState(0);
+  // Per-section countdown (each section has its own time limit; one-way) +
+  // per-question elapsed timer (counts up, a soft pace indicator).
+  const [sectionLeft, setSectionLeft] = useState(0);
   const [qElapsed, setQElapsed] = useState(0);
 
   const section = SECTION_ORDER[sectionIdx];
@@ -84,32 +91,29 @@ export default function ReasoningExamRunner() {
     return keys.indexOf(q.answer);
   }
 
-  // Total test time = sum of all section budgets × their question counts.
-  function totalTestSeconds(): number {
-    return SECTION_ORDER.reduce((sum, s) => sum + SECTION_BUDGET[s] * SECTION_COUNT[s], 0);
-  }
-
-  // Move to the next section (or finish).
+  // Move to the next section (or finish). Resets the new section's clock.
   const nextSection = useCallback(() => {
     if (sectionIdx + 1 < SECTION_ORDER.length) {
-      setSectionIdx((s) => s + 1);
+      const ns = sectionIdx + 1;
+      setSectionIdx(ns);
       setQIdx(0);
       setQElapsed(0);
+      setSectionLeft(SECTION_DURATION[SECTION_ORDER[ns]]);
     } else {
       setFinished(true);
     }
   }, [sectionIdx]);
 
-  // Overall test countdown; hitting zero ends the whole test.
+  // Section countdown; hitting zero advances to the next section (one-way).
   useEffect(() => {
     if (!started || finished) return;
-    if (overallLeft <= 0) {
-      setFinished(true);
+    if (sectionLeft <= 0) {
+      nextSection();
       return;
     }
-    const t = setTimeout(() => setOverallLeft((s) => s - 1), 1000);
+    const t = setTimeout(() => setSectionLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [overallLeft, started, finished]);
+  }, [sectionLeft, started, finished, nextSection]);
 
   // Per-question elapsed timer (counts up; soft pace indicator). Resets when
   // the question changes.
@@ -151,7 +155,7 @@ export default function ReasoningExamRunner() {
       setSectionIdx(0);
       setQIdx(0);
       setQElapsed(0);
-      setOverallLeft(totalTestSeconds());
+      setSectionLeft(SECTION_DURATION.verbal);
       setStarted(true);
       setFinished(false);
     } catch {
@@ -271,11 +275,11 @@ export default function ReasoningExamRunner() {
   // Live feedback (practice mode only): once an answer is picked, is it correct?
   const correctIdx = correctIndexFor(section, qIdx);
   const showFeedback = practice && chosen !== null;
-  const totalTime = totalTestSeconds();
+  const sectionTotal = SECTION_DURATION[section];
 
   return (
     <div className="mt-6">
-      {/* Header: section + overall & per-question timers */}
+      {/* Header: section + per-question timer */}
       <div className="flex items-center justify-between text-sm text-neutral-500">
         <span>
           <span className="font-semibold text-neutral-800">{SECTION_LABEL[section]}</span>{" "}
@@ -289,12 +293,12 @@ export default function ReasoningExamRunner() {
         </div>
       </div>
 
-      {/* Two timers: overall countdown + per-question elapsed */}
+      {/* Two timers: THIS SECTION countdown (its own limit) + per-question elapsed */}
       <div className="mt-2 flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3 text-sm">
         <div>
-          <div className="text-xs text-neutral-500">Overall test</div>
-          <div className={`text-lg font-bold tabular-nums ${overallLeft <= 120 ? "text-red-600" : overallLeft <= 300 ? "text-amber-600" : "text-green-700"}`}>
-            {fmt(overallLeft)} <span className="text-xs font-normal text-neutral-400">/ {fmt(totalTime)}</span>
+          <div className="text-xs text-neutral-500">{SECTION_LABEL[section]} time left</div>
+          <div className={`text-lg font-bold tabular-nums ${sectionLeft <= 30 ? "text-red-600" : sectionLeft <= 90 ? "text-amber-600" : "text-green-700"}`}>
+            {fmt(sectionLeft)} <span className="text-xs font-normal text-neutral-400">/ {fmt(sectionTotal)}</span>
           </div>
         </div>
         <div className="text-right">
