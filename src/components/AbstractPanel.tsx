@@ -217,7 +217,14 @@ function SegmentsPanel({ segments, dotPos, uid }: { segments: SegPattern[]; dotP
       {dotPos !== undefined && (() => {
         const [a, b] = tris[dotPos % 8];
         const [dx, dy] = centroid(a, b);
-        return <circle cx={dx} cy={dy} r={4} fill="#111827" stroke="white" strokeWidth={1} />;
+        // White halo behind the dot so it reads as a solid black marker on ANY
+        // segment pattern (prevents the dot looking filled/hollow by accident).
+        return (
+          <g>
+            <circle cx={dx} cy={dy} r={6} fill="white" />
+            <circle cx={dx} cy={dy} r={4} fill="#111827" />
+          </g>
+        );
       })()}
     </>
   );
