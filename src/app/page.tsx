@@ -62,7 +62,7 @@ export default function Home() {
         Start reasoning mock (verbal · numerical · abstract) &rarr;
       </a>
       <p className="mt-1 text-xs text-neutral-500">
-        EPSO Part 1 · 10 + 10 + 10 · real per-section timing · difficulty selectable
+        EPSO Part 1 · 20 verbal + 10 numerical + 10 abstract · official timing · difficulty selectable
       </p>
 
       <div className="mt-5 rounded-lg border border-neutral-300 bg-white p-4 text-sm">

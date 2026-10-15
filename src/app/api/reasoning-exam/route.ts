@@ -12,8 +12,8 @@ import { BYOK_HEADER } from "@/lib/userKey";
 // numerical). Abstract is generated locally on the client (no LLM). Mirrors
 // EPSO Part 1: 10 verbal + 10 numerical here, 10 abstract on the client.
 
-const VERBAL_COUNT = 10;
-const NUMERICAL_COUNT = 10;
+const VERBAL_COUNT = 20; // official notice: verbal = 20 questions / 35 min
+const NUMERICAL_COUNT = 10; // numerical = 10 questions / 20 min
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -43,6 +43,29 @@ async function generateSection(
   byokKey: string,
   harden: boolean,
 ) {
+  // The generator caps at 10 per call, so request in batches of up to 10.
+  const batchSizes: number[] = [];
+  let remaining = count;
+  while (remaining > 0) { batchSizes.push(Math.min(10, remaining)); remaining -= 10; }
+
+  const batches = await Promise.all(
+    batchSizes.map((n) => generateBatch(topic, n, difficulty, language, byokKey, harden)),
+  );
+  let questions = batches.flat();
+  if (questions.length < count) {
+    questions = [...questions, ...seedFallback(topic, count - questions.length, language, difficulty)];
+  }
+  return questions.slice(0, count);
+}
+
+async function generateBatch(
+  topic: Topic,
+  count: number,
+  difficulty: Difficulty,
+  language: QuestionLanguage,
+  byokKey: string,
+  harden: boolean,
+) {
   const byok = byokKey.length > 0;
   if (!byok && !tryConsumeLlmCall()) {
     return seedFallback(topic, count, language, difficulty);
@@ -61,7 +84,6 @@ async function generateSection(
     if (harden && (byok || tryConsumeLlmCall())) {
       questions = await hardenQuestions(questions, topic, getLlmConfig(byokKey || undefined));
     }
-    // top up from seed if the model returned fewer than asked
     if (questions.length < count) {
       const pad = seedFallback(topic, count - questions.length, language, difficulty);
       questions = [...questions, ...pad];

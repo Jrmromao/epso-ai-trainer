@@ -8,7 +8,7 @@ export default function ReasoningExamPage() {
       </a>
       <h1 className="mt-2 text-2xl font-bold">Reasoning Mock &mdash; Part 1</h1>
       <p className="mt-1 text-sm text-neutral-500">
-        10 verbal · 10 numerical · 10 abstract, timed to the real EPSO pace.
+        20 verbal · 10 numerical · 10 abstract (40 questions), timed to the official notice.
       </p>
       <ReasoningExamRunner />
     </main>

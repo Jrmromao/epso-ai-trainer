@@ -16,7 +16,8 @@ import { llmHeaders } from "@/lib/userKey";
 
 const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D", "E"];
 const OPTION_LETTERS = ["A", "B", "C", "D", "E"];
-const COUNT = 10;
+// Official notice (Quadro 3): verbal 20Q/35min, numerical 10Q/20min, abstract 10Q/10min.
+const SECTION_COUNT: Record<Section, number> = { verbal: 20, numerical: 10, abstract: 10 };
 
 type Section = "verbal" | "numerical" | "abstract";
 const SECTION_ORDER: Section[] = ["verbal", "numerical", "abstract"];
@@ -106,8 +107,8 @@ export default function ReasoningExamRunner() {
     setLoading(true);
     setError(null);
     try {
-      // abstract locally
-      const abs = Array.from({ length: COUNT }, () =>
+      // abstract locally (10 questions per the notice)
+      const abs = Array.from({ length: SECTION_COUNT.abstract }, () =>
         generateAbstractQuestion(difficulty as AbstractDifficulty),
       );
       // verbal + numerical from the API
@@ -128,7 +129,7 @@ export default function ReasoningExamRunner() {
       setAnswers({});
       setSectionIdx(0);
       setQIdx(0);
-      setSectionLeft(SECTION_BUDGET.verbal * (v.length || COUNT));
+      setSectionLeft(SECTION_BUDGET.verbal * (v.length || SECTION_COUNT.verbal));
       setStarted(true);
       setFinished(false);
     } catch {
@@ -143,12 +144,12 @@ export default function ReasoningExamRunner() {
     return (
       <div className="mt-6">
         <p className="text-neutral-600">
-          A full EPSO Part 1 mock: <strong>10 verbal · 10 numerical · 10 abstract</strong>,
-          each timed at the real EPSO pace. Verbal &amp; numerical are generated;
-          abstract is generated locally. A per-section report at the end.
+          A full EPSO Part 1 mock: <strong>20 verbal · 10 numerical · 10 abstract</strong>{" "}
+          (40 questions), timed to the official notice. Verbal &amp; numerical are
+          generated; abstract is generated locally. A per-section report at the end.
         </p>
         <p className="mt-2 text-sm text-neutral-500">
-          Verbal 105s/Q · Numerical 120s/Q · Abstract 60s/Q.
+          Verbal 20Q/35min · Numerical 10Q/20min · Abstract 10Q/10min.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm">
@@ -181,7 +182,7 @@ export default function ReasoningExamRunner() {
           disabled={loading}
           className="mt-5 rounded bg-neutral-900 px-5 py-2 text-white disabled:opacity-40"
         >
-          {loading ? "Building 30-question mock…" : "Start reasoning mock"}
+          {loading ? "Building 40-question mock…" : "Start reasoning mock"}
         </button>
       </div>
     );
@@ -200,23 +201,28 @@ export default function ReasoningExamRunner() {
     };
     const vScore = scoreOf(0), nScore = scoreOf(1), aScore = scoreOf(2);
     const totalCorrect = vScore + nScore + aScore;
+    const verbalPass = vScore >= 10; // 10/20
+    const combinedPass = nScore + aScore >= 10; // combined 10/20
+    const maxOf = [20, 10, 10];
     return (
       <div className="mt-6">
         <h2 className="text-2xl font-bold">Reasoning mock complete</h2>
-        <p className="mt-1 text-neutral-600">Overall: {totalCorrect}/30</p>
+        <p className="mt-1 text-neutral-600">Overall: {totalCorrect}/40</p>
         <div className="mt-4 space-y-2">
           {SECTION_ORDER.map((s, i) => (
             <div key={s} className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3">
               <span className="font-medium">{SECTION_LABEL[s]}</span>
-              <span className="font-semibold tabular-nums">{[vScore, nScore, aScore][i]}/10</span>
+              <span className="font-semibold tabular-nums">{[vScore, nScore, aScore][i]}/{maxOf[i]}</span>
             </div>
           ))}
         </div>
-        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          Real EPSO gates: verbal needs 10/20 on its own; numerical + abstract are
-          combined and need 10/20 together. Here numerical+abstract ={" "}
-          <strong>{nScore + aScore}/20</strong>, verbal ={" "}
-          <strong>{vScore * 2}/20</strong> (scaled).
+        <div className="mt-3 space-y-2">
+          <div className={`rounded-lg border p-3 text-sm ${verbalPass ? "border-green-300 bg-green-50 text-green-900" : "border-red-300 bg-red-50 text-red-900"}`}>
+            <span className="font-semibold">Verbal gate (needs 10/20):</span> {vScore}/20 — {verbalPass ? "PASS" : "BELOW PASS"}
+          </div>
+          <div className={`rounded-lg border p-3 text-sm ${combinedPass ? "border-green-300 bg-green-50 text-green-900" : "border-red-300 bg-red-50 text-red-900"}`}>
+            <span className="font-semibold">Numerical + Abstract gate (combined, needs 10/20):</span> {nScore + aScore}/20 — {combinedPass ? "PASS" : "BELOW PASS"}
+          </div>
         </div>
         <div className="mt-4 flex gap-2">
           <button onClick={() => setStarted(false)} className="rounded bg-neutral-900 px-4 py-2 text-white">
