@@ -245,13 +245,17 @@ function CurvesPanel({ curves }: { curves: { y: number; flip: boolean }[] }) {
   );
 }
 
-// COMPOSITE3: three independent rows of elements stacked vertically.
+// COMPOSITE: N independent rows of elements stacked vertically (2-6 rows).
+// Element size adapts to the row count so dense panels stay legible.
 function Composite3Panel({ rows }: { rows: Element[][] }) {
-  const sz = 15;
+  const R = rows.length;
+  const maxCols = Math.max(1, ...rows.map((r) => r.length));
+  // shrink elements as rows/columns grow
+  const sz = Math.max(8, Math.min(16, Math.floor(70 / Math.max(R, maxCols))));
   return (
     <>
       {rows.map((row, r) => {
-        const cy = ((r + 1) / (rows.length + 1)) * BOX;
+        const cy = ((r + 1) / (R + 1)) * BOX;
         const n = row.length;
         return row.map((el, c) => {
           const cx = ((c + 1) / (n + 1)) * BOX;

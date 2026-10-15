@@ -1127,6 +1127,71 @@ function panelKey(p: Panel): string {
   return JSON.stringify(p);
 }
 
+// ---------------------------------------------------------------------------
+// SOLVER GATE. An INDEPENDENT re-derivation of the answer, run before a
+// question is ever shown. For composite (N-row) panels it detects each row's
+// rule purely from the five shown panels and predicts panel 6; the item is only
+// served if the solver's prediction matches the generator's answer AND is
+// unique. This guarantees every presented question is actually solvable by the
+// stated logic — no trust in the generator's self-declared answer.
+// ---------------------------------------------------------------------------
+
+function rowKey(row: Element[]): string {
+  return JSON.stringify(row);
+}
+
+// Predict a single row's next state from its first five observations.
+// Detects: constant (decoy), periodic cycle (period 2..5), and arithmetic
+// count progression (same shape/fill, element count changes by a constant step).
+// Returns null if no rule is detectable.
+function solveRow(obs: Element[][]): Element[] | null {
+  const keys = obs.map(rowKey);
+  // constant / decoy
+  if (new Set(keys).size === 1) return obs[0].map((e) => ({ ...e }));
+
+  // arithmetic count progression: all rows share one shape+fill, counts form an
+  // arithmetic sequence. Predict the next count.
+  const shape0 = obs[0][0]?.shape;
+  const fill0 = obs[0][0]?.fill;
+  const sameStyle = obs.every((row) => row.length > 0 && row.every((e) => e.shape === shape0 && e.fill === fill0));
+  if (sameStyle) {
+    const counts = obs.map((row) => row.length);
+    const diffs = counts.slice(1).map((c, i) => c - counts[i]);
+    if (diffs.every((d) => d === diffs[0])) {
+      const next = counts[counts.length - 1] + diffs[0];
+      if (next >= 1) return Array.from({ length: next }, () => ({ shape: shape0!, fill: fill0! }));
+    }
+  }
+
+  // periodic cycle with period p in 2..5
+  for (let p = 2; p <= 5; p++) {
+    let periodic = true;
+    for (let i = 0; i + p < obs.length; i++) {
+      if (keys[i] !== keys[i + p]) { periodic = false; break; }
+    }
+    if (periodic && obs.length - p >= 1) {
+      return obs[5 % p].map((e) => ({ ...e }));
+    }
+  }
+  return null;
+}
+
+// Solve a composite (N-row) item: predict panel 6 row-by-row. Returns the
+// predicted panel, or null if any row is unsolvable.
+function solveComposite(shown: Panel[]): Panel | null {
+  if (!shown.every((p) => p.layout === "composite3" && p.rows)) return null;
+  const R = shown[0].rows!.length;
+  if (!shown.every((p) => p.rows!.length === R)) return null;
+  const predictedRows: Element[][] = [];
+  for (let r = 0; r < R; r++) {
+    const obs = shown.map((p) => p.rows![r]);
+    const next = solveRow(obs);
+    if (!next) return null;
+    predictedRows.push(next);
+  }
+  return { layout: "composite3", slots: [], rows: predictedRows };
+}
+
 // A fully-specified item built by a frame generator: the six panels (0..5),
 // plus a declaration of the rule periods so the validator can check period
 // discipline and uniqueness.
@@ -1134,11 +1199,10 @@ interface BuiltItem {
   panels: Panel[]; // length 6; panels[5] is the answer
   periods: number[]; // period of each independently varying attribute
   ruleSummary: string;
-  // makeNearMiss(i): produce a distractor that breaks exactly rule i.
   nearMisses: Panel[]; // exactly 4 controlled single-rule violations
 }
 
-// Validate the four invariants. Returns true if the item is sound.
+// Validate the invariants + run the solver gate. Returns true if sound.
 function validateItem(item: BuiltItem, spec: TierSpec): boolean {
   // (1) period discipline — nothing repeats within the shown window.
   if (combinedPeriod(item.periods) < spec.minCombinedPeriod) return false;
@@ -1152,6 +1216,17 @@ function validateItem(item: BuiltItem, spec: TierSpec): boolean {
   if (nmKeys.length !== 4) return false;
   if (nmKeys.some((k) => k === answerKey)) return false; // a near-miss equal to answer = two correct
   if (new Set([answerKey, ...nmKeys]).size !== 5) return false; // all 5 options distinct
+
+  // (5) SOLVER GATE for composite panels: an independent solver must re-derive
+  // the SAME answer purely from the shown panels. If it can't, the item is not
+  // reliably solvable and is rejected before presentation.
+  if (item.panels[0].layout === "composite3") {
+    const predicted = solveComposite(item.panels.slice(0, 5));
+    if (!predicted) return false;
+    if (panelKey(predicted) !== answerKey) return false;
+    // and no near-miss may also match the solver's prediction (ambiguity)
+    if (nmKeys.includes(panelKey(predicted))) return false;
+  }
 
   // (4) uniqueness (practical form): the answer must CONTINUE the shown
   // sequence, i.e. panels[5] must not equal any earlier shown panel (which
@@ -1354,9 +1429,138 @@ function frameCoupledCross(rng: () => number): BuiltItem {
   };
 }
 
-// FRAME: easy — a row of three with a single, easy-to-see progression but a
-// combined period of 6 so the five shown panels are all distinct. Shape cycles
-// (period 3) with fill alternating (period 2); the two are coprime -> period 6.
+// FRAME: generalised N-ROW. The backbone hard frame. R rows (2-6), each with
+// its own element type and its own rule drawn from a family. Some rows are
+// DECOYS — constant across all panels — the "settles nothing" trap. Active-row
+// rules use coprime periods so the panel never visibly repeats. Distractors
+// each break exactly one ACTIVE row (never a decoy, which would be unfair).
+type RowRule =
+  | { kind: "count"; vals: number[]; shape: ShapeKind }
+  | { kind: "fill"; shape: ShapeKind; cols: number; start: Fill }
+  | { kind: "shapeCycle"; cycle: ShapeKind[]; cols: number }
+  | { kind: "orientation"; cols: number; startUp: boolean }
+  | { kind: "decoy"; shape: ShapeKind; fill: Fill; cols: number };
+
+function rowElementsAt(rule: RowRule, t: number): Element[] {
+  switch (rule.kind) {
+    case "count": {
+      const n = Math.max(1, cycleAt(rule.vals, t));
+      return Array.from({ length: n }, () => ({ shape: rule.shape, fill: "outline" as Fill }));
+    }
+    case "fill": {
+      const f: Fill = (t % 2 === 0) === (rule.start === "solid") ? "solid" : "outline";
+      return Array.from({ length: rule.cols }, () => ({ shape: rule.shape, fill: f }));
+    }
+    case "shapeCycle": {
+      const shape = cycleAt(rule.cycle, t);
+      return Array.from({ length: rule.cols }, () => ({ shape, fill: "solid" as Fill }));
+    }
+    case "orientation": {
+      const up = (t % 2 === 0) === rule.startUp;
+      return Array.from({ length: rule.cols }, () => ({ shape: "triangle", fill: "solid" as Fill, tri: up ? "up" : "down" }));
+    }
+    case "decoy":
+      return Array.from({ length: rule.cols }, () => ({ shape: rule.shape, fill: rule.fill }));
+  }
+}
+
+// Period of a row rule (1 = constant/decoy).
+function rowPeriod(rule: RowRule): number {
+  switch (rule.kind) {
+    case "count": return rule.vals.length;
+    case "fill": return 2;
+    case "shapeCycle": return rule.cycle.length;
+    case "orientation": return 2;
+    case "decoy": return 1;
+  }
+}
+
+// Is this row an ACTIVE (non-decoy) rule?
+function isActive(rule: RowRule): boolean {
+  return rule.kind !== "decoy";
+}
+
+function frameNRow(rng: () => number, rows: number, activeRules: number): BuiltItem {
+  const shapesPool = shuffleArr(rng, NON_ARROW);
+  // Rule factories, grouped by period so we can guarantee a long combined period.
+  const makeCount3 = (): RowRule => ({ kind: "count", vals: pick(rng, [[1, 2, 3], [2, 3, 4], [1, 2, 3, 4]]), shape: pick(rng, shapesPool) });
+  const makeShapeCycle3 = (): RowRule => ({ kind: "shapeCycle", cycle: makeShapeCycle(rng, 3), cols: pick(rng, [2, 3]) });
+  const makeFill2 = (): RowRule => ({ kind: "fill", shape: pick(rng, shapesPool), cols: pick(rng, [2, 3]), start: pick(rng, ["solid", "outline"] as Fill[]) });
+  const makeOrient2 = (): RowRule => ({ kind: "orientation", cols: 3, startUp: rng() < 0.5 });
+  const period3Factories = [makeCount3, makeShapeCycle3];
+  const period2Factories = [makeFill2, makeOrient2];
+
+  // Build the active rule set. To GUARANTEE five distinct shown panels, one
+  // active row is a "count" rule whose six values are all distinct within the
+  // window (a strictly varying count), which alone makes every panel differ.
+  // Remaining active rows add independent rules on top.
+  const distinctCountVals = pick(rng, [
+    [1, 2, 3, 4, 5, 6],
+    [6, 5, 4, 3, 2, 1],
+    [2, 3, 4, 5, 6, 7],
+    [1, 3, 2, 4, 3, 5],
+  ]);
+  const activeRuleSet: RowRule[] = [
+    { kind: "count", vals: distinctCountVals, shape: pick(rng, shapesPool) },
+  ];
+  while (activeRuleSet.length < activeRules) {
+    activeRuleSet.push(pick(rng, [...period3Factories, ...period2Factories])());
+  }
+
+  // Assign active rules to random row positions; the rest are decoys.
+  const rowRules: RowRule[] = [];
+  const activeIdx = shuffleArr(rng, Array.from({ length: rows }, (_, i) => i)).slice(0, activeRules);
+  let a = 0;
+  for (let r = 0; r < rows; r++) {
+    if (activeIdx.includes(r)) {
+      rowRules.push(activeRuleSet[a++]);
+    } else {
+      rowRules.push({ kind: "decoy", shape: pick(rng, shapesPool), fill: pick(rng, ["solid", "outline"] as Fill[]), cols: pick(rng, [1, 2, 3]) });
+    }
+  }
+
+  const panelAt = (t: number): Panel => ({
+    layout: "composite3",
+    slots: [],
+    rows: rowRules.map((rule) => rowElementsAt(rule, t)),
+  });
+
+  const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
+  const answer = panels[5];
+
+  // Build 4 near-misses: each breaks exactly one ACTIVE row.
+  const activeRows = rowRules.map((r, i) => ({ r, i })).filter((x) => isActive(x.r));
+  const nearMisses: Panel[] = [];
+  for (let k = 0; k < 4; k++) {
+    const target = activeRows[k % activeRows.length];
+    const nm = clonePanel(answer);
+    // perturb the target row by advancing its rule one extra step
+    nm.rows![target.i] = rowElementsAt(target.r, 6 + k); // wrong continuation
+    // guarantee it actually differs from the answer's row; else flip a fill
+    if (JSON.stringify(nm.rows![target.i]) === JSON.stringify(answer.rows![target.i])) {
+      nm.rows![target.i] = nm.rows![target.i].map((e) => ({ ...e, fill: e.fill === "solid" ? "outline" : "solid" }));
+    }
+    nearMisses.push(nm);
+  }
+
+  const activePeriods = rowRules.filter(isActive).map(rowPeriod);
+  const decoyCount = rowRules.filter((r) => !isActive(r)).length;
+  return {
+    panels,
+    periods: activePeriods.length ? activePeriods : [1],
+    ruleSummary:
+      `A ${rows}-row frame. ${activeRules} row${activeRules === 1 ? "" : "s"} follow a rule (count, fill, shape-cycle or orientation); ` +
+      `${decoyCount} row${decoyCount === 1 ? " is" : "s are"} unchanging DECOYS that settle nothing. ` +
+      "Check every row — find which ones change and how, and ignore the constant ones.",
+    nearMisses,
+    // carry rule metadata for the solver gate
+    __rowRules: rowRules,
+  } as BuiltItem & { __rowRules: RowRule[] };
+}
+
+// FRAME: easy — a single element with a shape cycle (period 3) + fill
+// alternation (period 2); the two are coprime -> period 6 so all 5 shown
+// panels are distinct.
 function frameEasy(rng: () => number): BuiltItem {
   const mode = pick(rng, ["arrow", "shape"]);
   if (mode === "arrow") {
@@ -1450,19 +1654,22 @@ type Generator = (rng: () => number, id: string) => AbstractQuestion;
 const TEMPLATES: Record<AbstractDifficulty, ((rng: () => number) => BuiltItem)[]> = {
   easy: [
     frameEasy,
+    (rng) => frameNRow(rng, 3, 2), // 3 rows, 2 active (coprime -> period>=6), 1 decoy
   ],
   medium: [
     frameMediumRow,
-    frameThreeRow, // dense multi-row even at medium (uses period-3 count)
+    (rng) => frameNRow(rng, 4, 2), // 4 rows, 2 active, 2 decoys
   ],
   hard: [
-    frameThreeRow,
+    (rng) => frameNRow(rng, 4, 3), // 4 rows, 3 active, 1 decoy
+    (rng) => frameNRow(rng, 5, 3), // 5 rows, 3 active, 2 decoys
     framePieGrid,
     frameSegments,
     frameCoupledCross,
   ],
   extreme: [
-    (rng) => frameThreeRow(rng, "extreme"),
+    (rng) => frameNRow(rng, 5, 4), // 5 rows, 4 active, 1 decoy
+    (rng) => frameNRow(rng, 6, 4), // 6 rows, 4 active, 2 decoys
     framePieGrid,
     frameSegments,
     frameCoupledCross,
