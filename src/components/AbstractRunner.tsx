@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   type AbstractDifficulty,
   type AbstractQuestion,
@@ -9,15 +9,16 @@ import {
 import AbstractPanel from "@/components/AbstractPanel";
 
 // Abstract reasoning practice runner. Fully deterministic — no LLM, no network.
-// Real EPSO abstract timing is ~50-60s per question; we use 55s.
+// Real EPSO abstract timing is 60s per question (10 questions / 10 minutes).
 
-const SECONDS_PER_Q = 60; // real EPSO: 10 questions / 10 minutes
+const SECONDS_PER_Q = 60;
 const OPTION_LETTERS = ["A", "B", "C", "D", "E"];
 
 const DIFFICULTY_BADGE: Record<AbstractDifficulty, { label: string; cls: string }> = {
-  easy:   { label: "Easy",   cls: "bg-green-100 text-green-800 border border-green-200" },
-  medium: { label: "Medium", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
-  hard:   { label: "Hard",   cls: "bg-red-100 text-red-800 border border-red-200" },
+  easy:    { label: "Easy",    cls: "bg-green-100 text-green-800 border border-green-200" },
+  medium:  { label: "Medium",  cls: "bg-amber-100 text-amber-800 border border-amber-200" },
+  hard:    { label: "Hard",    cls: "bg-red-100 text-red-800 border border-red-200" },
+  extreme: { label: "Extreme", cls: "bg-purple-100 text-purple-800 border border-purple-200" },
 };
 
 export default function AbstractRunner() {
@@ -31,6 +32,10 @@ export default function AbstractRunner() {
   const [secondsLeft, setSecondsLeft] = useState(SECONDS_PER_Q);
   const [started, setStarted] = useState(false);
   const [finished, setFinished] = useState(false);
+  // Strict (exam) mode: when the 60s runs out, the question is auto-locked and
+  // after a brief reveal it auto-advances — you cannot linger past the limit.
+  const [strict, setStrict] = useState(true);
+  const [timedOut, setTimedOut] = useState(false);
 
   const current = questions[index];
 
@@ -41,17 +46,33 @@ export default function AbstractRunner() {
     setIndex(0);
     setChosen(null);
     setRevealed(false);
+    setTimedOut(false);
     setScore({ correct: 0, answered: 0 });
     setSecondsLeft(SECONDS_PER_Q);
     setStarted(true);
     setFinished(false);
   }
 
+  const next = useCallback(() => {
+    setChosen(null);
+    setRevealed(false);
+    setTimedOut(false);
+    setSecondsLeft(SECONDS_PER_Q);
+    setIndex((i) => {
+      if (i + 1 >= questions.length) {
+        setFinished(true);
+        return i;
+      }
+      return i + 1;
+    });
+  }, [questions.length]);
+
   const submit = useCallback(
-    (pick: number | null) => {
+    (pick: number | null, viaTimeout = false) => {
       if (revealed || !current) return;
       setChosen(pick);
       setRevealed(true);
+      if (viaTimeout) setTimedOut(true);
       setScore((s) => ({
         correct: s.correct + (pick === current.answerIndex ? 1 : 0),
         answered: s.answered + 1,
@@ -60,21 +81,22 @@ export default function AbstractRunner() {
     [revealed, current],
   );
 
-  // Per-question timer
+  // Per-question countdown. Hitting 0 auto-submits whatever is selected (or a
+  // skip) and flags it as a timeout.
   useEffect(() => {
     if (!started || finished || revealed || !current) return;
-    if (secondsLeft <= 0) { submit(chosen); return; }
+    if (secondsLeft <= 0) { submit(chosen, true); return; }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
   }, [secondsLeft, started, finished, revealed, current, chosen, submit]);
 
-  function next() {
-    if (index + 1 >= questions.length) { setFinished(true); return; }
-    setIndex((i) => i + 1);
-    setChosen(null);
-    setRevealed(false);
-    setSecondsLeft(SECONDS_PER_Q);
-  }
+  // Strict (exam) mode: once revealed by a TIMEOUT, auto-advance after a short
+  // pause so you cannot sit on the explanation beyond the time limit.
+  useEffect(() => {
+    if (!strict || !revealed || !timedOut || finished) return;
+    const t = setTimeout(() => next(), 2500);
+    return () => clearTimeout(t);
+  }, [strict, revealed, timedOut, finished, next]);
 
   // ---- Start screen ----
   if (!started) {
@@ -86,22 +108,46 @@ export default function AbstractRunner() {
           AI, so there are no faulty questions.
         </p>
         <p className="mt-2 text-sm text-neutral-500">
-          10 questions · ~55s each · pattern types: arrow rotation, multi-shape
-          cycles, positional rotation.
+          10 questions · 60s each (real EPSO pace) · pattern types: rotation,
+          counting, reflection, cross layouts, curves, 8-segment squares and
+          multi-rule composites.
         </p>
+
+        {/* Strict (exam) mode toggle */}
+        <label className="mt-4 flex items-center gap-2 text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            checked={strict}
+            onChange={(e) => setStrict(e.target.checked)}
+          />
+          <span>
+            <strong>Strict exam timing</strong> — when 60s runs out the question
+            locks and auto-advances. Off = you may study the explanation before
+            moving on.
+          </span>
+        </label>
+
         <div className="mt-4">
           <p className="text-sm font-medium text-neutral-700">Difficulty</p>
-          <div className="mt-2 flex gap-2">
-            {(["easy", "medium", "hard"] as AbstractDifficulty[]).map((d) => (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(["easy", "medium", "hard", "extreme"] as AbstractDifficulty[]).map((d) => (
               <button
                 key={d}
                 onClick={() => start(d)}
-                className="rounded-lg border border-neutral-300 bg-white px-4 py-2 capitalize transition hover:border-neutral-900"
+                className={`rounded-lg border px-4 py-2 capitalize transition hover:border-neutral-900 ${
+                  d === "extreme"
+                    ? "border-purple-300 bg-purple-50 text-purple-900"
+                    : "border-neutral-300 bg-white"
+                }`}
               >
                 {d}
               </button>
             ))}
           </div>
+          <p className="mt-2 text-xs text-neutral-500">
+            Extreme = 3-4 simultaneous rules on dense layouts, modelled on the
+            hardest official EPSO samples.
+          </p>
         </div>
       </div>
     );
@@ -146,9 +192,26 @@ export default function AbstractRunner() {
       <div className="flex items-center justify-between text-sm text-neutral-500">
         <span>Question {index + 1} / {questions.length}</span>
         <div className="flex items-center gap-2">
+          {strict && (
+            <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600">
+              Exam timing
+            </span>
+          )}
           <span className={`rounded px-2 py-0.5 text-xs font-medium ${badge.cls}`}>{badge.label}</span>
-          <span className={secondsLeft <= 10 ? "font-semibold text-red-600" : ""}>{secondsLeft}s</span>
+          <span className={`font-semibold tabular-nums ${secondsLeft <= 10 ? "text-red-600" : "text-neutral-700"}`}>
+            {secondsLeft}s
+          </span>
         </div>
+      </div>
+
+      {/* Timer progress bar */}
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200">
+        <div
+          className={`h-full transition-[width] duration-1000 ease-linear ${
+            secondsLeft <= 10 ? "bg-red-500" : secondsLeft <= 20 ? "bg-amber-500" : "bg-green-600"
+          }`}
+          style={{ width: `${(secondsLeft / SECONDS_PER_Q) * 100}%` }}
+        />
       </div>
 
       {/* Sequence */}
@@ -197,15 +260,25 @@ export default function AbstractRunner() {
 
       {revealed && (
         <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+          {timedOut && chosen === null && (
+            <p className="mb-1 text-sm font-semibold text-red-600">⏱ Time up — no answer selected (counts as wrong)</p>
+          )}
+          {timedOut && chosen !== null && (
+            <p className="mb-1 text-sm font-semibold text-amber-600">⏱ Time up — locked your current selection</p>
+          )}
           <p className={chosen === current.answerIndex ? "font-semibold text-green-700" : "font-semibold text-red-700"}>
             {chosen === current.answerIndex
               ? "Correct"
               : `Incorrect — answer is ${OPTION_LETTERS[current.answerIndex]}`}
           </p>
           <p className="mt-2 text-sm text-neutral-700">{current.ruleSummary}</p>
-          <button onClick={next} className="mt-4 rounded bg-neutral-900 px-4 py-2 text-white">
-            {index + 1 >= questions.length ? "Finish" : "Next question"}
-          </button>
+          {strict && timedOut ? (
+            <p className="mt-4 text-xs text-neutral-500">Auto-advancing…</p>
+          ) : (
+            <button onClick={next} className="mt-4 rounded bg-neutral-900 px-4 py-2 text-white">
+              {index + 1 >= questions.length ? "Finish" : "Next question"}
+            </button>
+          )}
         </div>
       )}
     </div>

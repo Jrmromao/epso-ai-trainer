@@ -9,7 +9,7 @@
 // positional rotation. The 8-segment fill-pattern format (hardest EPSO tier)
 // is intentionally out of scope for now.
 
-export type AbstractDifficulty = "easy" | "medium" | "hard";
+export type AbstractDifficulty = "easy" | "medium" | "hard" | "extreme";
 
 // A primitive element drawn in a slot.
 export type ShapeKind =
@@ -50,7 +50,8 @@ export type PanelLayout =
   | "count"
   | "segments"
   | "curves"
-  | "composite3";
+  | "composite3"
+  | "pieCross"; // 4 corner pie-circles + up to 2 centre shapes (EPSO Q9 extreme)
 
 // Segment fill patterns for the 8-segment square (EPSO Q4 format).
 export type SegPattern = "blank" | "solid" | "dots" | "lines" | "checker";
@@ -763,6 +764,93 @@ function genComposite3(rng: () => number, id: string): AbstractQuestion {
 }
 
 // ----------------------------------------------------------------------------
+// EXTREME templates — 3+ simultaneous rules on dense layouts, modelled on the
+// hardest EPSO samples (image-2 Q8/Q9/Q10). These are deliberately brutal.
+// ----------------------------------------------------------------------------
+
+// EXTREME template: FOUR-RULE COMPOSITE. Like composite3 but every row carries
+// its own changing attribute AND the top row count changes AND fills alternate
+// on two rows out of phase — four things to track at once.
+function genExtremeComposite(rng: () => number, id: string): AbstractQuestion {
+  const topStep = pick(rng, [1, -1]);
+  const topStart = topStep === 1 ? 1 : 4;
+  const midUpStart = rng() < 0.5;
+  const topFill: Fill = pick(rng, ["solid", "outline"] as Fill[]);
+  const botShape = pick(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie"));
+  const botStep = pick(rng, [1, -1]);
+  const botStart = botStep === 1 ? 1 : 4;
+
+  const row = (shape: ShapeKind, n: number, fill: Fill, tri?: "up" | "down"): Element[] =>
+    Array.from({ length: Math.max(1, n) }, () => ({ shape, fill, ...(tri ? { tri } : {}) }));
+
+  const panelFor = (i: number): Panel => ({
+    layout: "composite3",
+    slots: [],
+    rows: [
+      // top: circles, count changes, fill alternates
+      row("circle", topStart + i * topStep, i % 2 === 0 ? topFill : topFill === "solid" ? "outline" : "solid"),
+      // middle: 3 triangles, orientation alternates
+      row("triangle", 3, "solid", (midUpStart ? i % 2 === 0 : i % 2 === 1) ? "up" : "down"),
+      // bottom: a chosen shape, count changes opposite direction, solid
+      row(botShape, botStart + i * botStep, "solid"),
+    ],
+  });
+
+  const sequence = [0, 1, 2, 3, 4].map(panelFor);
+  const correct = panelFor(5);
+  const distractors: Panel[] = [];
+  { const p = clonePanel(correct); p.rows![0] = row("circle", p.rows![0].length + 1, p.rows![0][0].fill); distractors.push(p); }
+  { const p = clonePanel(correct); p.rows![1] = p.rows![1].map((e) => ({ ...e, tri: e.tri === "up" ? "down" : "up" })); distractors.push(p); }
+  { const p = clonePanel(correct); p.rows![2] = row(botShape, p.rows![2].length - 1 >= 1 ? p.rows![2].length - 1 : p.rows![2].length + 1, "solid"); distractors.push(p); }
+  { const p = clonePanel(correct); p.rows![0] = p.rows![0].map((e) => ({ ...e, fill: e.fill === "solid" ? "outline" : "solid" })); distractors.push(p); }
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "extreme", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary:
+      "Four rules at once: top circles change COUNT and alternate FILL; middle triangles alternate ORIENTATION; bottom shapes change COUNT in the opposite direction. Every rule must line up.",
+  };
+}
+
+// EXTREME template: CORNER PIES + CENTRE STACK (EPSO Q9). Four quarter-filled
+// circles sit at the corners, each rotating; two shapes stacked in the centre
+// cycle shape and fill. Rotation + stack-cycle + fill = three simultaneous rules.
+function genExtremePieCross(rng: () => number, id: string): AbstractQuestion {
+  const cornerStarts = [0, 1, 2, 3].map(() => Math.floor(rng() * 4));
+  const rotStep = pick(rng, [1, -1]);
+  const centreCycle = shuffleArr(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie")).slice(0, 3);
+  const bottomCentre = pick(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie"));
+
+  const panelFor = (i: number): Panel => ({
+    layout: "pieCross",
+    slots: [
+      // 4 corners NE, SE, SW, NW
+      { shape: "pie", fill: "solid", quarter: ((cornerStarts[0] + i * rotStep) % 4 + 4) % 4 },
+      { shape: "pie", fill: "solid", quarter: ((cornerStarts[1] + i * rotStep) % 4 + 4) % 4 },
+      { shape: "pie", fill: "solid", quarter: ((cornerStarts[2] + i * rotStep) % 4 + 4) % 4 },
+      { shape: "pie", fill: "solid", quarter: ((cornerStarts[3] + i * rotStep) % 4 + 4) % 4 },
+      // centre top: cycles shape
+      { shape: centreCycle[i % 3], fill: "outline" },
+      // centre bottom: fixed shape, fill alternates
+      { shape: bottomCentre, fill: i % 2 === 0 ? "solid" : "outline" },
+    ],
+  });
+
+  const sequence = [0, 1, 2, 3, 4].map(panelFor);
+  const correct = panelFor(5);
+  const distractors: Panel[] = [];
+  { const p = clonePanel(correct); const e = p.slots[0]!; p.slots[0] = { ...e, quarter: (e.quarter! + 1) % 4 }; distractors.push(p); }
+  { const p = clonePanel(correct); p.slots[4] = { ...p.slots[4]!, shape: centreCycle[(5 + 1) % 3] }; distractors.push(p); }
+  { const p = clonePanel(correct); const e = p.slots[5]!; p.slots[5] = { ...e, fill: e.fill === "solid" ? "outline" : "solid" }; distractors.push(p); }
+  distractors.push(panelFor(4));
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "extreme", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary:
+      "Three rules at once: the four corner quarter-circles all rotate together; the top centre shape cycles through a 3-shape sequence; the bottom centre shape keeps its shape but alternates fill.",
+  };
+}
+
+// ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
 type Generator = (rng: () => number, id: string) => AbstractQuestion;
@@ -788,6 +876,12 @@ const TEMPLATES: Record<AbstractDifficulty, Generator[]> = {
     genHardFlipTravel,
     (rng, id) => genReflection(rng, id, "hard"),
     genSegments,
+    genComposite3,
+  ],
+  extreme: [
+    genExtremeComposite,
+    genExtremePieCross,
+    genSegments, // the 8-segment square is genuinely extreme too
     genComposite3,
   ],
 };

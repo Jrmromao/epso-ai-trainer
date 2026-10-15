@@ -105,6 +105,16 @@ function slotPositions(layout: Panel["layout"], count: number): { x: number; y: 
         { x: 0.2, y: 0.5 },
         { x: 0.5, y: 0.5 },
       ];
+    case "pieCross":
+      // 4 corners (NE, SE, SW, NW) + centre top + centre bottom
+      return [
+        { x: 0.78, y: 0.22 },
+        { x: 0.78, y: 0.78 },
+        { x: 0.22, y: 0.78 },
+        { x: 0.22, y: 0.22 },
+        { x: 0.5, y: 0.4 },
+        { x: 0.5, y: 0.62 },
+      ];
     default:
       return Array.from({ length: count }, (_, i) => ({ x: (i + 1) / (count + 1), y: 0.5 }));
   }
@@ -113,6 +123,7 @@ function slotPositions(layout: Panel["layout"], count: number): { x: number; y: 
 function shapeSize(layout: Panel["layout"]): number {
   if (layout === "single") return 36;
   if (layout === "cross") return 22;
+  if (layout === "pieCross") return 20;
   return 24;
 }
 
