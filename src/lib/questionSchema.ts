@@ -348,10 +348,31 @@ function buildReadingComprehensionPrompt(count: number, difficulty: Difficulty =
     "Distractors must be WRONG strictly against the passage — never true-but-" +
     "unstated trivia. Each distractor should look correct at a glance. " +
     "Do NOT use 'all of the above' or throwaway options.\n\n" +
+    "ALMOST-TRUE DISCIPLINE (critical — this is what makes the item exam-hard): " +
+    "Each distractor must be wrong by only ONE small degree — a single qualifier, " +
+    "quantifier, scope word, or causal link away from being a faithful paraphrase. " +
+    "A knowledgeable candidate reading quickly should find THREE options that all " +
+    "feel defensible. The wrongness must hinge on one word, not on being off-topic. " +
+    "Study these REAL EPSO patterns and reproduce their subtlety:\n" +
+    "- Text: 'leg muscles make up a significant % of body mass, roughly equal to " +
+    "wing muscles of flying birds.' CORRECT: 'leg muscles are a significant % of " +
+    "body mass.' TRAP (overreach): 'leg muscles are the MOST IMPORTANT factor' — " +
+    "the text never ranks factors, it only lists two.\n" +
+    "- Text: 'even if badly burned, it recovers quickly from its roots.' CORRECT: " +
+    "'does better where there is less competition.' TRAP (absolute): 'CANNOT be " +
+    "destroyed by fire or drought' — 'recovers quickly' is not 'cannot be destroyed'.\n" +
+    "- Text: 'they vanished AFTER the arrival of man.' CORRECT: 'lemurs lived there " +
+    "before man.' TRAP (unstated causal): 'extinction is a DIRECT CONSEQUENCE of " +
+    "man's arrival' — the text states sequence, not cause.\n" +
+    "- Text: 'a part of the Alaska road used log foundations.' CORRECT: a different " +
+    "literal fact. TRAP (scope): 'a LARGE part of the Alaska road' — 'a part' is " +
+    "not 'a large part'.\n" +
+    "Your distractors must bite exactly like these: true-sounding, one qualifier " +
+    "too strong/wide/causal.\n\n" +
     "The \"explanation\" must: (a) identify the sentence(s) in the passage that " +
     "support the correct answer and explain why it is the faithful paraphrase; " +
     "(b) for EACH distractor, name its trap type in CAPITALS and quote the exact " +
-    "passage wording it distorts.\n\n" +
+    "passage wording it distorts, showing the ONE word/degree that makes it wrong.\n\n" +
     registerNote + "\n\n" +
     'Each question object MUST include a "difficulty" field set to "' + difficulty + '" and a "language" field set to "' + language + '".\n\n' +
     "Output ONLY a JSON object of the form " +

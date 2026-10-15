@@ -494,6 +494,42 @@ export const SEED_QUESTIONS: Question[] = [
       "B é a paráfrase fiel: o texto afirma que os cloroplastos 'contêm clorofila, o pigmento responsável pela absorção da luz solar'. A é GENERALIZAÇÃO INDEVIDA — o texto inclui explicitamente algas e certas bactérias, não apenas plantas terrestres. C é INVERSÃO/NEGAÇÃO — o texto diz que sem fotossíntese os níveis de oxigénio seriam 'muito mais reduzidos', não superiores. D é TROCA DE QUANTIDADE/ÂMBITO — o texto diz que plantas e fitoplâncton são responsáveis por 'cerca de metade' da produção total, não pela totalidade.",
   },
 
+  // Verbal RC — pt-PT, HARD. Modelled on real EPSO items where every distractor
+  // is "almost true" — wrong by a single qualifier. Trains the exact traps that
+  // catch careful readers (overreach, scope, unstated causal, belief-as-fact).
+  {
+    id: "verbalrc-ptpt-02",
+    topic: "verbal-rc",
+    difficulty: "hard",
+    language: "pt-PT",
+    stem: "A ema é a maior ave nativa da Austrália e a segunda maior ave do mundo em altura, depois da avestruz, à qual está aparentada. As emas não voam e podem atingir dois metros de altura. Percorrem longas distâncias em trote rápido e, em distâncias curtas, podem atingir cerca de 50 km/h. Esta capacidade de correr resulta de dois fatores: os músculos dos seus membros inferiores, altamente especializados, representam uma percentagem significativa da massa corporal total — aproximadamente igual à dos músculos das asas das aves que voam; e a estrutura das patas está especificamente adaptada à corrida.\n\nQual das seguintes afirmações está correta?",
+    choices: {
+      A: "A ema é a única ave do mundo que pode atingir dois metros de altura",
+      B: "Os músculos dos membros inferiores são o fator mais importante da sua capacidade de correr",
+      C: "Os músculos dos membros inferiores representam uma percentagem significativa da massa corporal das emas",
+      D: "As emas conseguem percorrer longas distâncias a uma velocidade que pode atingir os 50 km/h",
+    },
+    answer: "C",
+    explanation:
+      "C é a paráfrase literal: o texto diz que os músculos dos membros inferiores 'representam uma percentagem significativa da massa corporal total'. B é SOBRE-INTERPRETAÇÃO (overreach) — o texto apresenta DOIS fatores sem os hierarquizar; 'o fator mais importante' acrescenta uma ordenação que o texto nunca faz. A é ABSOLUTO INDEVIDO — o texto diz 'a segunda maior em altura', não que seja a única a atingir dois metros. D é TROCA DE ÂMBITO — os 50 km/h aplicam-se a 'distâncias curtas', não a 'longas distâncias' (onde a ema anda em trote).",
+  },
+  {
+    id: "verbalrc-ptpt-03",
+    topic: "verbal-rc",
+    difficulty: "hard",
+    language: "pt-PT",
+    stem: "Os lémures pertencem a uma classe de primatas designados prossímios. Pensa-se que tenham vivido originalmente em África, mas atualmente encontram-se apenas na ilha de Madagáscar e nalgumas ilhas vizinhas mais pequenas, como as Comores, onde foram provavelmente introduzidos pelo homem. O seu tamanho varia entre 30 gramas, no lémure-rato-pigmeu, e 10 kg, no lémure índri. No passado existiam espécies de dimensão ainda maior em Madagáscar, que desapareceram após a chegada do homem à ilha. Os lémures mais pequenos são geralmente noturnos, enquanto os de maiores dimensões tendem a ser diurnos, embora algumas variedades constituam exceção.\n\nQual das seguintes afirmações está correta?",
+    choices: {
+      A: "Os lémures viviam em Madagáscar antes da chegada do homem",
+      B: "Os lémures são uma espécie nativa das Comores",
+      C: "O lémure índri só está ativo durante o dia",
+      D: "A extinção dos lémures de maior dimensão em Madagáscar é consequência direta da chegada do homem",
+    },
+    answer: "A",
+    explanation:
+      "A é a paráfrase fiel: o texto diz que as espécies maiores 'desapareceram após a chegada do homem', o que implica que já lá viviam antes. D é LIGAÇÃO CAUSAL NÃO AFIRMADA — o texto estabelece uma SEQUÊNCIA ('após a chegada'), não uma CAUSA ('consequência direta'); é a armadilha mais tentadora. B é ÂMBITO/ORIGEM — nas Comores foram 'provavelmente introduzidos pelo homem', portanto não são nativos. C é SOBRE-INTERPRETAÇÃO — o texto diz que os maiores 'tendem a ser diurnos', com exceções; 'só está ativo durante o dia' é um absoluto que o texto evita.",
+  },
+
   // Numérico — pt-PT
   {
     id: "numerical-ptpt-01",
