@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ChoiceKey, Difficulty, Question, QuestionLanguage } from "@/lib/types";
-import { isNumerical } from "@/lib/types";
 import { type AbstractDifficulty, type AbstractQuestion, generateAbstractQuestion } from "@/lib/abstractReasoning";
 import AbstractPanel from "@/components/AbstractPanel";
 import QuestionTableView from "@/components/QuestionTableView";
@@ -32,14 +31,6 @@ const SECTION_BUDGET: Record<Section, number> = {
   abstract: SECONDS_PER_QUESTION.abstract,
 };
 
-// A unified answer record across all three sections.
-interface Rec {
-  section: Section;
-  correctIndex: number; // 0-based correct option
-  chosenIndex: number | null;
-  isCorrect: boolean;
-}
-
 export default function ReasoningExamRunner() {
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [language, setLanguage] = useState<QuestionLanguage>("pt-PT");
@@ -56,88 +47,60 @@ export default function ReasoningExamRunner() {
   const [finished, setFinished] = useState(false);
   const [sectionIdx, setSectionIdx] = useState(0);
   const [qIdx, setQIdx] = useState(0);
-  const [chosen, setChosen] = useState<number | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState(SECONDS_PER_QUESTION.verbal);
-  const [records, setRecords] = useState<Rec[]>([]);
+  // Answers stored per question: key `${sectionIdx}:${qIdx}` -> option index.
+  // This lets the candidate navigate freely and revise within a section.
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  // Section-level countdown (EPSO gives a total time per section; you navigate
+  // freely within it). budget * question-count.
+  const [sectionLeft, setSectionLeft] = useState(0);
 
   const section = SECTION_ORDER[sectionIdx];
-  const budget = SECTION_BUDGET[section];
+  const perQBudget = SECTION_BUDGET[section];
+  const sectionQuestions = section === "verbal" ? verbal : section === "numerical" ? numerical : abstract;
+  const totalInSection = sectionQuestions.length;
+  const key = `${sectionIdx}:${qIdx}`;
+  const chosen = answers[key] ?? null;
 
-  // Current question's option count + correct index, abstracted over the 3 types.
-  function currentMeta(): { optionCount: number; correctIndex: number } | null {
-    if (section === "abstract") {
-      const q = abstract[qIdx];
-      if (!q) return null;
-      return { optionCount: 5, correctIndex: q.answerIndex };
-    }
-    const q = (section === "verbal" ? verbal : numerical)[qIdx];
-    if (!q) return null;
+  function pick(i: number) {
+    setAnswers((a) => ({ ...a, [`${sectionIdx}:${qIdx}`]: i }));
+  }
+
+  // Correct option index for an arbitrary question in a section.
+  function correctIndexFor(sec: Section, idx: number): number {
+    if (sec === "abstract") return abstract[idx]?.answerIndex ?? -1;
+    const q = (sec === "verbal" ? verbal : numerical)[idx];
+    if (!q) return -1;
     const keys = CHOICE_KEYS.filter((k) => {
       const label = q.choices[k];
       return label && label !== "-" && label !== "(unused)";
     });
-    const correctIndex = keys.indexOf(q.answer);
-    return { optionCount: keys.length, correctIndex };
+    return keys.indexOf(q.answer);
   }
 
-  const commit = useCallback(
-    (pick: number | null) => {
-      const meta = currentMeta();
-      if (!meta) return;
-      setRecords((r) => [
-        ...r,
-        {
-          section,
-          correctIndex: meta.correctIndex,
-          chosenIndex: pick,
-          isCorrect: pick === meta.correctIndex,
-        },
-      ]);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [section, qIdx, verbal, numerical, abstract],
-  );
-
-  const advance = useCallback(() => {
-    // move within section, or to next section, or finish
-    const total = section === "verbal" ? verbal.length : section === "numerical" ? numerical.length : abstract.length;
-    if (qIdx + 1 < total) {
-      setQIdx((i) => i + 1);
-    } else if (sectionIdx + 1 < SECTION_ORDER.length) {
-      const next = SECTION_ORDER[sectionIdx + 1];
-      setSectionIdx((s) => s + 1);
+  // Move to the next section (or finish). Locks the current section.
+  const nextSection = useCallback(() => {
+    if (sectionIdx + 1 < SECTION_ORDER.length) {
+      const ns = sectionIdx + 1;
+      const nextSec = SECTION_ORDER[ns];
+      const nextQs = nextSec === "verbal" ? verbal : nextSec === "numerical" ? numerical : abstract;
+      setSectionIdx(ns);
       setQIdx(0);
-      setSecondsLeft(SECTION_BUDGET[next]);
+      setSectionLeft(SECTION_BUDGET[nextSec] * nextQs.length);
     } else {
       setFinished(true);
-      return;
     }
-    setChosen(null);
-    setSecondsLeft((prev) => prev); // set below by effect reset
-  }, [section, qIdx, sectionIdx, verbal.length, numerical.length, abstract.length]);
+  }, [sectionIdx, verbal, numerical, abstract]);
 
-  // Reset per-question timer whenever the question changes.
+  // Section-level countdown; hitting zero ends the section (answers kept).
   useEffect(() => {
     if (!started || finished) return;
-    setSecondsLeft(SECTION_BUDGET[SECTION_ORDER[sectionIdx]]);
-  }, [sectionIdx, qIdx, started, finished]);
-
-  // Countdown — auto-submit current (as a skip if unanswered) at 0.
-  useEffect(() => {
-    if (!started || finished) return;
-    if (secondsLeft <= 0) {
-      commit(chosen);
-      advance();
+    if (sectionLeft <= 0) {
+      nextSection();
       return;
     }
-    const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
+    const t = setTimeout(() => setSectionLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [secondsLeft, started, finished, chosen, commit, advance]);
-
-  function submit() {
-    commit(chosen);
-    advance();
-  }
+  }, [sectionLeft, started, finished, nextSection]);
 
   async function start() {
     setLoading(true);
@@ -158,14 +121,14 @@ export default function ReasoningExamRunner() {
         return;
       }
       const data = (await res.json()) as { verbal?: Question[]; numerical?: Question[] };
-      setVerbal(data.verbal ?? []);
+      const v = data.verbal ?? [];
+      setVerbal(v);
       setNumerical(data.numerical ?? []);
       setAbstract(abs);
-      setRecords([]);
+      setAnswers({});
       setSectionIdx(0);
       setQIdx(0);
-      setChosen(null);
-      setSecondsLeft(SECTION_BUDGET.verbal);
+      setSectionLeft(SECTION_BUDGET.verbal * (v.length || COUNT));
       setStarted(true);
       setFinished(false);
     } catch {
@@ -226,30 +189,34 @@ export default function ReasoningExamRunner() {
 
   // ---- Result screen ----
   if (finished) {
-    const bySection = (s: Section) => records.filter((r) => r.section === s);
-    const scoreOf = (s: Section) => bySection(s).filter((r) => r.isCorrect).length;
-    const totalCorrect = records.filter((r) => r.isCorrect).length;
-    // EPSO-style pass marks: verbal 10/20 scaled => here 5/10; numerical+abstract combined 10/20 => here 10/20.
+    const scoreOf = (sIdx: number): number => {
+      const sec = SECTION_ORDER[sIdx];
+      const qs = sec === "verbal" ? verbal : sec === "numerical" ? numerical : abstract;
+      let n = 0;
+      for (let i = 0; i < qs.length; i++) {
+        if ((answers[`${sIdx}:${i}`] ?? -1) === correctIndexFor(sec, i)) n++;
+      }
+      return n;
+    };
+    const vScore = scoreOf(0), nScore = scoreOf(1), aScore = scoreOf(2);
+    const totalCorrect = vScore + nScore + aScore;
     return (
       <div className="mt-6">
         <h2 className="text-2xl font-bold">Reasoning mock complete</h2>
         <p className="mt-1 text-neutral-600">Overall: {totalCorrect}/30</p>
         <div className="mt-4 space-y-2">
-          {SECTION_ORDER.map((s) => {
-            const score = scoreOf(s);
-            return (
-              <div key={s} className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3">
-                <span className="font-medium">{SECTION_LABEL[s]}</span>
-                <span className="font-semibold tabular-nums">{score}/10</span>
-              </div>
-            );
-          })}
+          {SECTION_ORDER.map((s, i) => (
+            <div key={s} className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3">
+              <span className="font-medium">{SECTION_LABEL[s]}</span>
+              <span className="font-semibold tabular-nums">{[vScore, nScore, aScore][i]}/10</span>
+            </div>
+          ))}
         </div>
         <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
           Real EPSO gates: verbal needs 10/20 on its own; numerical + abstract are
           combined and need 10/20 together. Here numerical+abstract ={" "}
-          <strong>{scoreOf("numerical") + scoreOf("abstract")}/20</strong>, verbal ={" "}
-          <strong>{scoreOf("verbal") * 2}/20</strong> (scaled).
+          <strong>{nScore + aScore}/20</strong>, verbal ={" "}
+          <strong>{vScore * 2}/20</strong> (scaled).
         </div>
         <div className="mt-4 flex gap-2">
           <button onClick={() => setStarted(false)} className="rounded bg-neutral-900 px-4 py-2 text-white">
@@ -261,40 +228,74 @@ export default function ReasoningExamRunner() {
     );
   }
 
-  // ---- Running: current question ----
-  const totalInSection = section === "verbal" ? verbal.length : section === "numerical" ? numerical.length : abstract.length;
-  const globalDone = records.length;
+  // ---- Running: current question with free navigation within the section ----
+  const answeredInSection = Array.from({ length: totalInSection }, (_, i) => answers[`${sectionIdx}:${i}`] !== undefined);
+  const answeredCount = answeredInSection.filter(Boolean).length;
+  const isLastSection = sectionIdx + 1 >= SECTION_ORDER.length;
 
   return (
     <div className="mt-6">
-      {/* Section header */}
+      {/* Section header + section-level timer */}
       <div className="flex items-center justify-between text-sm text-neutral-500">
         <span>
           <span className="font-semibold text-neutral-800">{SECTION_LABEL[section]}</span>{" "}
-          · Q {qIdx + 1}/{totalInSection} · overall {globalDone}/30
+          · Q {qIdx + 1}/{totalInSection} · {answeredCount} answered
         </span>
-        <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs">
-          Section {sectionIdx + 1}/3
-        </span>
+        <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs">Section {sectionIdx + 1}/3</span>
       </div>
-      <QuestionTimer secondsLeft={secondsLeft} budget={budget} label="Time for this question" />
+      <QuestionTimer secondsLeft={sectionLeft} budget={perQBudget * totalInSection} label="Time left in this section" />
 
       {/* Question body */}
       <div className="mt-4">
         {section === "abstract" ? (
-          <AbstractQ q={abstract[qIdx]} chosen={chosen} onPick={setChosen} />
+          <AbstractQ q={abstract[qIdx]} chosen={chosen} onPick={pick} />
         ) : (
-          <McqQ q={(section === "verbal" ? verbal : numerical)[qIdx]} chosen={chosen} onPick={setChosen} />
+          <McqQ q={(section === "verbal" ? verbal : numerical)[qIdx]} chosen={chosen} onPick={pick} />
         )}
       </div>
 
-      <button
-        onClick={submit}
-        disabled={chosen === null}
-        className="mt-4 rounded bg-neutral-900 px-5 py-2 text-white disabled:opacity-40"
-      >
-        {globalDone + 1 >= 30 ? "Finish" : "Submit & next"}
-      </button>
+      {/* Prev / Next navigation */}
+      <div className="mt-5 flex items-center justify-between">
+        <button
+          onClick={() => setQIdx((i) => Math.max(0, i - 1))}
+          disabled={qIdx === 0}
+          className="rounded border border-neutral-300 px-4 py-2 disabled:opacity-40"
+        >
+          ← Previous
+        </button>
+        {qIdx + 1 < totalInSection ? (
+          <button onClick={() => setQIdx((i) => i + 1)} className="rounded bg-neutral-900 px-4 py-2 text-white">
+            Next →
+          </button>
+        ) : (
+          <button onClick={nextSection} className="rounded bg-red-600 px-4 py-2 text-white">
+            {isLastSection ? "Finish exam" : "Finish section →"}
+          </button>
+        )}
+      </div>
+
+      {/* Question jump grid (within the current section) */}
+      <div className="mt-5 grid grid-cols-10 gap-1">
+        {Array.from({ length: totalInSection }, (_, i) => (
+          <button
+            key={i}
+            onClick={() => setQIdx(i)}
+            className={`h-8 rounded text-xs ${
+              i === qIdx
+                ? "bg-neutral-900 text-white"
+                : answeredInSection[i]
+                  ? "bg-green-100 text-green-800"
+                  : "bg-neutral-100 text-neutral-500"
+            }`}
+          >
+            {i + 1}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-neutral-500">
+        Navigate freely within this section. Finishing the section (or the timer
+        reaching zero) locks it and moves on — you cannot return, as in the real exam.
+      </p>
     </div>
   );
 }
