@@ -1317,72 +1317,96 @@ function frameSegments(rng: () => number): BuiltItem {
 function frameCoupledCross(rng: () => number): BuiltItem {
   const posStep = pick(rng, [1, -1]);
   const centreCycle = makeShapeCycle(rng, 3);
-  const markerShape = pick(rng, NON_ARROW);
-  // position -> fill coupling: arms 0(N),2(S) solid; 1(E),3(W) outline
-  const fillForPos = (pos: number): Fill => (pos % 2 === 0 ? "solid" : "outline");
+  // four distinct shapes occupy the four arms and ROTATE position each step
+  const armShapes = shuffleArr(rng, NON_ARROW); // 4 distinct shapes
+  const activeStep = pick(rng, [1, -1]);
+  // which arm is "active" (solid) travels; all other arms are outline.
   const panelAt = (t: number): Panel => {
-    const pos = ((t * posStep) % 4 + 4) % 4;
-    const slots: (Element | null)[] = [null, null, null, null, null];
-    slots[pos] = { shape: markerShape, fill: fillForPos(pos) };
-    slots[4] = { shape: cycleAt(centreCycle, t), fill: "outline" };
+    const active = ((t * activeStep) % 4 + 4) % 4;
+    const slots: (Element | null)[] = [0, 1, 2, 3].map((arm) => {
+      // the shape at this arm is the rotated assignment
+      const shape = armShapes[((arm - t * posStep) % 4 + 4) % 4];
+      return { shape, fill: arm === active ? "solid" : "outline" } as Element;
+    });
+    slots.push({ shape: cycleAt(centreCycle, t), fill: "outline" }); // centre
     return { layout: "cross", slots };
   };
   const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
   const answer = panels[5];
-  const correctPos = ((5 * posStep) % 4 + 4) % 4;
-  const mk = (pos: number, fill: Fill, centre: ShapeKind): Panel => {
-    const slots: (Element | null)[] = [null, null, null, null, null];
-    slots[pos] = { shape: markerShape, fill };
-    slots[4] = { shape: centre, fill: "outline" };
-    return { layout: "cross", slots };
-  };
-  const centreNow = cycleAt(centreCycle, 5);
-  const nm1 = mk((correctPos + 1) % 4, fillForPos((correctPos + 1) % 4), centreNow); // position wrong (fill follows, so this is a position error)
-  const nm2 = mk(correctPos, fillForPos(correctPos) === "solid" ? "outline" : "solid", centreNow); // fill ignores the coupling
-  const nm3 = mk(correctPos, fillForPos(correctPos), cycleAt(centreCycle, 6)); // centre cycle wrong
-  const nm4 = mk((correctPos + 2) % 4, fillForPos((correctPos + 2) % 4), centreNow); // opposite arm
+  // Controlled single-rule near-misses on the dense frame.
+  const nm1 = clonePanel(answer); // outer rotation off by one -> use panel 4's arrangement with correct active
+  { const alt = panelAt(4); for (let a = 0; a < 4; a++) nm1.slots[a] = { ...alt.slots[a]!, fill: answer.slots[a]!.fill }; }
+  const nm2 = clonePanel(answer); // active (solid) arm wrong
+  {
+    const curActive = answer.slots.findIndex((s, i) => i < 4 && s && s.fill === "solid");
+    const wrongActive = (curActive + 1) % 4;
+    for (let a = 0; a < 4; a++) nm2.slots[a] = { ...nm2.slots[a]!, fill: a === wrongActive ? "solid" : "outline" };
+  }
+  const nm3 = clonePanel(answer); nm3.slots[4] = { ...nm3.slots[4]!, shape: cycleAt(centreCycle, 6) }; // centre cycle wrong
+  const nm4 = clonePanel(answer); // two outer shapes swapped
+  { const tmp = nm4.slots[0]; nm4.slots[0] = nm4.slots[2]; nm4.slots[2] = tmp; }
   return {
     panels,
-    periods: [4, 3], // orbit vs centre-cycle, coprime -> 12
+    periods: [4, 4, 3], // outer-rotation(4), active-travel(4), centre-cycle(3) -> lcm 12
     ruleSummary:
-      "A coupled cross: the marker ORBITS the four arms each step, and its FILL is DETERMINED by where it lands — solid on the top/bottom arms, outline on the left/right arms. The centre shape cycles through three forms. Position must be found first, because it dictates the fill.",
+      "A full cross frame: the four outer shapes rotate position around the cross each step; one arm is highlighted SOLID and that highlight travels round the arms; and the centre shape cycles through three forms. Three things move at once — track the rotation, the solid highlight, and the centre.",
     nearMisses: [nm1, nm2, nm3, nm4],
   };
 }
 
-// FRAME: easy single element with ONE rule of period >= 3 (arrow full rotation,
-// or shape cycle of 3). Still rigorous (period discipline) but one attribute.
+// FRAME: easy — a row of three with a single, easy-to-see progression but a
+// combined period of 6 so the five shown panels are all distinct. Shape cycles
+// (period 3) with fill alternating (period 2); the two are coprime -> period 6.
 function frameEasy(rng: () => number): BuiltItem {
   const mode = pick(rng, ["arrow", "shape"]);
   if (mode === "arrow") {
     const start = pick(rng, CW);
     const step = pick(rng, [1, -1]);
-    const dirAt = (t: number) => rotateDir(start, t * step);
-    const panelAt = (t: number): Panel => ({ layout: "single", slots: [{ shape: "arrow", fill: "solid", direction: dirAt(t) }] });
+    // single arrow that rotates, plus a fill that alternates -> period lcm(4,2)=4.
+    // To get 5 distinct panels we also move it along the row (period 3 position).
+    const panelAt = (t: number): Panel => {
+      const pos = t % 3;
+      const slots: (Element | null)[] = [null, null, null];
+      slots[pos] = { shape: "arrow", fill: "solid", direction: rotateDir(start, t * step) };
+      return { layout: "row3", slots };
+    };
     const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
     const answer = panels[5];
-    const nm: Panel[] = CW.filter((d) => d !== answer.slots[0]!.direction).map((d) => ({ layout: "single", slots: [{ shape: "arrow", fill: "solid", direction: d }] }));
-    // 3 distinct wrong directions + a repeat of panel 4
-    const nmArr = [nm[0], nm[1], nm[2], panelAt(4)].slice(0, 4);
+    const correctPos = 5 % 3;
+    const mk = (pos: number, dir: Direction): Panel => {
+      const slots: (Element | null)[] = [null, null, null];
+      slots[pos] = { shape: "arrow", fill: "solid", direction: dir };
+      return { layout: "row3", slots };
+    };
+    const dir5 = answer.slots[correctPos]!.direction!;
+    const nm1 = mk(correctPos, rotateDir(dir5, 1));
+    const nm2 = mk(correctPos, rotateDir(dir5, -1));
+    const nm3 = mk((correctPos + 1) % 3, dir5);
+    const nm4 = clonePanel(panelAt(4));
     return {
       panels,
-      periods: [4],
-      ruleSummary: `The arrow rotates 90° ${step === 1 ? "clockwise" : "anticlockwise"} each step. Continue the rotation.`,
-      nearMisses: nmArr,
+      periods: [4, 3], // rotation(4) x position(3) -> 12
+      ruleSummary: `The arrow rotates 90° ${step === 1 ? "clockwise" : "anticlockwise"} each step AND moves one place along the row. Continue both.`,
+      nearMisses: [nm1, nm2, nm3, nm4],
     };
   }
   const cycle = makeShapeCycle(rng, 3);
-  const panelAt = (t: number): Panel => ({ layout: "single", slots: [{ shape: cycleAt(cycle, t), fill: t % 2 === 0 ? "solid" : "outline" }] });
+  // one shape that cycles (period 3) and alternates fill (period 2) -> period 6.
+  const panelAt = (t: number): Panel => ({
+    layout: "row3",
+    slots: [null, { shape: cycleAt(cycle, t), fill: t % 2 === 0 ? "solid" : "outline" }, null],
+  });
   const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
   const answer = panels[5];
-  const nm1 = { layout: "single", slots: [{ ...answer.slots[0]!, shape: cycleAt(cycle, 6) }] } as Panel;
-  const nm2 = { layout: "single", slots: [{ ...answer.slots[0]!, fill: answer.slots[0]!.fill === "solid" ? "outline" : "solid" }] } as Panel;
-  const nm3 = panelAt(4);
-  const nm4 = { layout: "single", slots: [{ ...answer.slots[0]!, shape: cycleAt(cycle, 7) }] } as Panel;
+  const base = answer.slots[1]!;
+  const nm1 = { layout: "row3", slots: [null, { ...base, shape: cycleAt(cycle, 6) }, null] } as Panel;
+  const nm2 = { layout: "row3", slots: [null, { ...base, fill: base.fill === "solid" ? "outline" : "solid" }, null] } as Panel;
+  const nm3 = clonePanel(panelAt(4));
+  const nm4 = { layout: "row3", slots: [null, { ...base, shape: cycleAt(cycle, 7) }, null] } as Panel;
   return {
     panels,
-    periods: [3],
-    ruleSummary: "The shape cycles through a fixed set of three AND the fill alternates. Continue both — note they go out of phase, so the figure only repeats every six steps.",
+    periods: [3, 2], // shape(3) x fill(2) -> 6
+    ruleSummary: "The shape cycles through three forms AND the fill alternates. Because the two periods differ the figure only repeats every six steps — continue both.",
     nearMisses: [nm1, nm2, nm3, nm4],
   };
 }
