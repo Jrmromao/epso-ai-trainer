@@ -30,7 +30,7 @@ const RESOURCE: Record<
     label: "Abstract practice",
     secondary: { href: "/tutorials/abstract-reasoning", label: "Technique guide" },
   },
-  essay: { href: "#study-externally", label: "EUFTE essay (external)" },
+  essay: { href: "/eufte", label: "EUFTE essay (timed + graded)" },
 };
 
 function loadConfig(): PlanConfig {

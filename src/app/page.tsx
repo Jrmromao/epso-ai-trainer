@@ -155,6 +155,15 @@ export default function Home() {
             Pattern sequences · generated locally (no AI)
           </div>
         </Link>
+        <Link
+          href="/eufte"
+          className="block rounded-lg border border-neutral-300 bg-white p-4 transition hover:border-neutral-900 hover:shadow-sm"
+        >
+          <div className="font-semibold">EUFTE Essay</div>
+          <div className="mt-1 text-sm text-neutral-500">
+            40-min timed essay · AI-graded on the 5 EPSO anchors
+          </div>
+        </Link>
       </div>
 
       <AccessGate />
