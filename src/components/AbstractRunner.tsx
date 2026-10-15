@@ -96,7 +96,7 @@ export default function AbstractRunner() {
   // pause so you cannot sit on the explanation beyond the time limit.
   useEffect(() => {
     if (!strict || !revealed || !timedOut || finished) return;
-    const t = setTimeout(() => next(), 2500);
+    const t = setTimeout(() => next(), 6000);
     return () => clearTimeout(t);
   }, [strict, revealed, timedOut, finished, next]);
 
@@ -257,10 +257,40 @@ export default function AbstractRunner() {
           )}
           <p className={chosen === current.answerIndex ? "font-semibold text-green-700" : "font-semibold text-red-700"}>
             {chosen === current.answerIndex
-              ? "Correct"
-              : `Incorrect — answer is ${OPTION_LETTERS[current.answerIndex]}`}
+              ? `Correct — ${OPTION_LETTERS[current.answerIndex]}`
+              : `Incorrect — the answer is ${OPTION_LETTERS[current.answerIndex]}`}
           </p>
-          <p className="mt-2 text-sm text-neutral-700">{current.ruleSummary}</p>
+
+          {/* The rule(s) in the sequence */}
+          <p className="mt-2 text-sm text-neutral-700">
+            <span className="font-medium">The pattern:</span> {current.ruleSummary}
+          </p>
+
+          {/* Full per-option breakdown */}
+          <div className="mt-3 space-y-1.5">
+            {current.options.map((_, i) => {
+              const isAnswer = i === current.answerIndex;
+              const isYours = i === chosen;
+              return (
+                <div
+                  key={i}
+                  className={`rounded px-2 py-1.5 text-sm ${
+                    isAnswer
+                      ? "bg-green-100 text-green-900"
+                      : isYours
+                        ? "bg-red-100 text-red-900"
+                        : "text-neutral-600"
+                  }`}
+                >
+                  <span className="font-semibold">{OPTION_LETTERS[i]}.</span>{" "}
+                  {isAnswer && <span className="font-semibold">✓ correct answer — </span>}
+                  {isYours && !isAnswer && <span className="font-semibold">your answer — </span>}
+                  {current.optionNotes?.[i] ?? ""}
+                </div>
+              );
+            })}
+          </div>
+
           {strict && timedOut ? (
             <p className="mt-4 text-xs text-neutral-500">Auto-advancing…</p>
           ) : (

@@ -80,6 +80,9 @@ export interface AbstractQuestion {
   options: Panel[]; // 5 answer options A-E
   answerIndex: number; // 0..4 -> A..E
   ruleSummary: string; // human-readable explanation of the rules
+  // Per-option description aligned to `options` (after shuffle). For the correct
+  // option it says why it fits; for each distractor it says which rule it breaks.
+  optionNotes?: string[];
 }
 
 // ----------------------------------------------------------------------------
@@ -1202,6 +1205,11 @@ interface BuiltItem {
   periods: number[]; // period of each independently varying attribute
   ruleSummary: string;
   nearMisses: Panel[]; // exactly 4 controlled single-rule violations
+  // Optional per-option notes. answerNote describes why the answer fits;
+  // nearMissNotes[i] describes which rule nearMisses[i] breaks. If omitted,
+  // the UI falls back to a generic correct/incorrect line.
+  answerNote?: string;
+  nearMissNotes?: string[];
 }
 
 // Validate the invariants + run the solver gate. Returns true if sound.
@@ -1238,21 +1246,30 @@ function validateItem(item: BuiltItem, spec: TierSpec): boolean {
   return true;
 }
 
-// Assemble the final AbstractQuestion from a validated BuiltItem.
+// Assemble the final AbstractQuestion from a validated BuiltItem. Options and
+// their notes are shuffled together so the per-option feedback stays aligned.
 function assemble(
   rng: () => number,
   id: string,
   difficulty: AbstractDifficulty,
   item: BuiltItem,
 ): AbstractQuestion {
-  const sh = shuffleWithAnswer(rng, [item.panels[5], ...item.nearMisses], 0);
+  const answerNote = item.answerNote ?? "This is the only option that satisfies every rule in the sequence.";
+  const nmNotes = item.nearMissNotes ?? item.nearMisses.map(() => "This option breaks one of the rules in the sequence.");
+  // Build (panel, note, isCorrect) tuples, shuffle, then read back aligned.
+  const tuples = [
+    { panel: item.panels[5], note: answerNote, correct: true },
+    ...item.nearMisses.map((p, i) => ({ panel: p, note: nmNotes[i] ?? "Breaks a rule.", correct: false })),
+  ];
+  const shuffled = shuffleArr(rng, tuples);
   return {
     id,
     difficulty,
     sequence: item.panels.slice(0, 5),
-    options: sh.options,
-    answerIndex: sh.answerIndex,
+    options: shuffled.map((t) => t.panel),
+    answerIndex: shuffled.findIndex((t) => t.correct),
     ruleSummary: item.ruleSummary,
+    optionNotes: shuffled.map((t) => t.note),
   };
 }
 
@@ -1545,32 +1562,54 @@ function frameNRow(rng: () => number, rows: number, activeRules: number): BuiltI
   const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
   const answer = panels[5];
 
-  // Build 4 near-misses: each breaks exactly one ACTIVE row.
+  // Build 4 near-misses: each breaks exactly one ACTIVE row. Track which row,
+  // so we can describe precisely what each distractor got wrong.
   const activeRows = rowRules.map((r, i) => ({ r, i })).filter((x) => isActive(x.r));
   const nearMisses: Panel[] = [];
+  const nearMissNotes: string[] = [];
+  const ruleName = (rule: RowRule): string => {
+    switch (rule.kind) {
+      case "count": return "the row whose element COUNT changes";
+      case "fill": return "the row whose FILL alternates";
+      case "shapeCycle": return "the row whose SHAPE cycles";
+      case "orientation": return "the row of triangles whose ORIENTATION flips";
+      case "size": return "the row whose element SIZE changes";
+      case "reflect": return "the row whose shapes MIRROR each step";
+      case "decoy": return "a constant row";
+    }
+  };
   for (let k = 0; k < 4; k++) {
     const target = activeRows[k % activeRows.length];
     const nm = clonePanel(answer);
-    // perturb the target row by advancing its rule one extra step
     nm.rows![target.i] = rowElementsAt(target.r, 6 + k); // wrong continuation
-    // guarantee it actually differs from the answer's row; else flip a fill
     if (JSON.stringify(nm.rows![target.i]) === JSON.stringify(answer.rows![target.i])) {
       nm.rows![target.i] = nm.rows![target.i].map((e) => ({ ...e, fill: e.fill === "solid" ? "outline" : "solid" }));
     }
     nearMisses.push(nm);
+    nearMissNotes.push(`Row ${target.i + 1} is wrong — it does not correctly continue ${ruleName(target.r)}. Every other row is right, which is what makes it tempting.`);
   }
 
   const activePeriods = rowRules.filter(isActive).map(rowPeriod);
   const decoyCount = rowRules.filter((r) => !isActive(r)).length;
+  // Describe each active row for the answer note.
+  const activeDescriptions = rowRules
+    .map((r, i) => ({ r, i }))
+    .filter((x) => isActive(x.r))
+    .map((x) => `row ${x.i + 1} (${ruleName(x.r).replace(/^the row (whose |of )?/, "")})`);
+  const answerNote =
+    `Correct. The active rows are: ${activeDescriptions.join("; ")}. ` +
+    (decoyCount > 0 ? `The remaining ${decoyCount} row${decoyCount === 1 ? "" : "s"} stay constant (decoys) and settle nothing. ` : "") +
+    "This option continues every active row correctly.";
   return {
     panels,
     periods: activePeriods.length ? activePeriods : [1],
     ruleSummary:
-      `A ${rows}-row frame. ${activeRules} row${activeRules === 1 ? "" : "s"} follow a rule (count, fill, shape-cycle or orientation); ` +
+      `A ${rows}-row frame. ${activeRules} row${activeRules === 1 ? "" : "s"} follow a rule (count, fill, shape-cycle, orientation, size or reflection); ` +
       `${decoyCount} row${decoyCount === 1 ? " is" : "s are"} unchanging DECOYS that settle nothing. ` +
       "Check every row — find which ones change and how, and ignore the constant ones.",
     nearMisses,
-    // carry rule metadata for the solver gate
+    nearMissNotes,
+    answerNote,
     __rowRules: rowRules,
   } as BuiltItem & { __rowRules: RowRule[] };
 }
