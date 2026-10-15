@@ -49,10 +49,20 @@ export default function Home() {
         href="/exam"
         className="mt-5 inline-block rounded-lg bg-neutral-900 px-5 py-3 text-white hover:bg-neutral-800"
       >
-        Start full 30-question exam &rarr;
+        Start full 30-question field exam &rarr;
       </a>
       <p className="mt-1 text-xs text-neutral-500">
-        40 min · pass 15/30 · live-generated (unlock below first)
+        Field AI MCQ · 40 min · pass 15/30 · live-generated (unlock below first)
+      </p>
+
+      <a
+        href="/reasoning-exam"
+        className="mt-3 inline-block rounded-lg border border-neutral-900 px-5 py-3 font-medium text-neutral-900 hover:bg-neutral-100"
+      >
+        Start reasoning mock (verbal · numerical · abstract) &rarr;
+      </a>
+      <p className="mt-1 text-xs text-neutral-500">
+        EPSO Part 1 · 10 + 10 + 10 · real per-section timing · difficulty selectable
       </p>
 
       <div className="mt-5 rounded-lg border border-neutral-300 bg-white p-4 text-sm">
