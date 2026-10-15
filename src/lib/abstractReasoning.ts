@@ -1069,46 +1069,379 @@ function genInteractCountDriven(rng: () => number, id: string): AbstractQuestion
   };
 }
 
+// ============================================================================
+// RIGOROUS FRAME-BASED ENGINE
+// ----------------------------------------------------------------------------
+// Every item is a function P(t) over t in {0..5}. The correct answer is P(5).
+// A panel is a fixed spatial FRAME of K cells; each varying ATTRIBUTE evolves
+// by a generator with a chosen PERIOD. Difficulty is governed by:
+//   D  = number of independently varying attributes
+//   L  = combined (lcm) period — must exceed the shown length so nothing
+//        visibly repeats within the 5 panels
+//   C  = coupling: whether one attribute is a function of another
+// A shared validator enforces four invariants on EVERY item at EVERY level:
+//   (1) no visible repeat within the 5 shown panels (period discipline)
+//   (2) exactly one option satisfies all rules
+//   (3) each distractor violates exactly one rule (controlled near-miss)
+//   (4) uniqueness: the shown panels are not consistent with a *simpler* rule
+// ============================================================================
+
+// Per-tier design budget. These numbers encode the doctrine applied uniformly.
+interface TierSpec {
+  minCombinedPeriod: number; // nothing may repeat inside this many steps
+}
+const TIER: Record<AbstractDifficulty, TierSpec> = {
+  easy: { minCombinedPeriod: 3 },
+  medium: { minCombinedPeriod: 6 },
+  hard: { minCombinedPeriod: 6 },
+  extreme: { minCombinedPeriod: 12 },
+};
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b);
+}
+function lcm(a: number, b: number): number {
+  return (a * b) / gcd(a, b);
+}
+function combinedPeriod(periods: number[]): number {
+  return periods.reduce((acc, p) => lcm(acc, p), 1);
+}
+
+// Attribute cycles with controlled period. Each returns the value at step t.
+// Shapes and fills use explicit cycles; periods are chosen coprime by the
+// caller so the combined period is long.
+type ShapeCycle = ShapeKind[];
+function cycleAt<T>(cycle: T[], t: number): T {
+  return cycle[((t % cycle.length) + cycle.length) % cycle.length];
+}
+
+const NON_ARROW: ShapeKind[] = ["circle", "square", "triangle", "diamond"];
+
+// Build a shape cycle of a given length from distinct shapes.
+function makeShapeCycle(rng: () => number, len: number): ShapeCycle {
+  return shuffleArr(rng, NON_ARROW).slice(0, len);
+}
+
+// Serialise a panel to a canonical string for equality / uniqueness checks.
+function panelKey(p: Panel): string {
+  return JSON.stringify(p);
+}
+
+// A fully-specified item built by a frame generator: the six panels (0..5),
+// plus a declaration of the rule periods so the validator can check period
+// discipline and uniqueness.
+interface BuiltItem {
+  panels: Panel[]; // length 6; panels[5] is the answer
+  periods: number[]; // period of each independently varying attribute
+  ruleSummary: string;
+  // makeNearMiss(i): produce a distractor that breaks exactly rule i.
+  nearMisses: Panel[]; // exactly 4 controlled single-rule violations
+}
+
+// Validate the four invariants. Returns true if the item is sound.
+function validateItem(item: BuiltItem, spec: TierSpec): boolean {
+  // (1) period discipline — nothing repeats within the shown window.
+  if (combinedPeriod(item.periods) < spec.minCombinedPeriod) return false;
+  // Also: the 5 shown panels must all be distinct (a visible repeat is a tell).
+  const shown = item.panels.slice(0, 5).map(panelKey);
+  if (new Set(shown).size !== 5) return false;
+
+  const answerKey = panelKey(item.panels[5]);
+  // (3) each near-miss must differ from the answer and from each other.
+  const nmKeys = item.nearMisses.map(panelKey);
+  if (nmKeys.length !== 4) return false;
+  if (nmKeys.some((k) => k === answerKey)) return false; // a near-miss equal to answer = two correct
+  if (new Set([answerKey, ...nmKeys]).size !== 5) return false; // all 5 options distinct
+
+  // (4) uniqueness (practical form): the answer must CONTINUE the shown
+  // sequence, i.e. panels[5] must not equal any earlier shown panel (which
+  // would admit a shorter-period rule as an equally-good explanation).
+  if (shown.includes(answerKey)) return false;
+
+  return true;
+}
+
+// Assemble the final AbstractQuestion from a validated BuiltItem.
+function assemble(
+  rng: () => number,
+  id: string,
+  difficulty: AbstractDifficulty,
+  item: BuiltItem,
+): AbstractQuestion {
+  const sh = shuffleWithAnswer(rng, [item.panels[5], ...item.nearMisses], 0);
+  return {
+    id,
+    difficulty,
+    sequence: item.panels.slice(0, 5),
+    options: sh.options,
+    answerIndex: sh.answerIndex,
+    ruleSummary: item.ruleSummary,
+  };
+}
+
+// Retry wrapper: build until the validator passes (or give up and return the
+// last attempt, which the shuffle still dedupes so the UI never breaks).
+function buildValid(
+  rng: () => number,
+  id: string,
+  difficulty: AbstractDifficulty,
+  build: () => BuiltItem,
+): AbstractQuestion {
+  const spec = TIER[difficulty];
+  let last: BuiltItem | null = null;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const item = build();
+    last = item;
+    if (validateItem(item, spec)) return assemble(rng, id, difficulty, item);
+  }
+  return assemble(rng, id, difficulty, last!);
+}
+
+// ---------------------------------------------------------------------------
+// Frame generators. Each produces a dense, structured panel like the real
+// EPSO items (Q8 three-row, Q9 pie-grid, Q10 plus). Attributes use coprime
+// periods so the combined period clears the tier minimum.
+// ---------------------------------------------------------------------------
+
+// FRAME: three-row composite (EPSO Q8). Each row is an independent attribute.
+// Rows: top circles (count, period pC), middle triangles (orientation, period
+// 2 — but combined with others), bottom shapes (shape-cycle, period pS).
+function frameThreeRow(rng: () => number, difficulty: AbstractDifficulty = "hard"): BuiltItem {
+  // Choose coprime periods for count and shape so combined >= 6 / 12.
+  const extreme = difficulty === "extreme";
+  const pCount = extreme ? 4 : 3; // count cycles over this many values
+  const pShape = 3;
+  const countVals = extreme ? [1, 2, 3, 4] : [1, 2, 3];
+  const botCycle = makeShapeCycle(rng, pShape);
+  const triPeriod = 2;
+
+  const rowCircles = (n: number): Element[] =>
+    Array.from({ length: Math.max(1, n) }, () => ({ shape: "circle", fill: "outline" as Fill }));
+  const rowTri = (up: boolean): Element[] =>
+    Array.from({ length: 3 }, () => ({ shape: "triangle", fill: "solid" as Fill, tri: up ? "up" : "down" }));
+  const rowBot = (shape: ShapeKind): Element[] => [{ shape, fill: "solid" }];
+
+  const panelAt = (t: number): Panel => ({
+    layout: "composite3",
+    slots: [],
+    rows: [
+      rowCircles(cycleAt(countVals, t)),
+      rowTri(t % triPeriod === 0),
+      rowBot(cycleAt(botCycle, t)),
+    ],
+  });
+
+  const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
+  const answer = panels[5];
+  // Controlled single-rule near-misses.
+  const nm1 = clonePanel(answer); nm1.rows![0] = rowCircles(cycleAt(countVals, 5) + 1); // count wrong
+  const nm2 = clonePanel(answer); nm2.rows![1] = nm2.rows![1].map((e) => ({ ...e, tri: e.tri === "up" ? "down" : "up" })); // orientation wrong
+  const nm3 = clonePanel(answer); nm3.rows![2] = rowBot(cycleAt(botCycle, 6)); // shape-cycle advanced wrong
+  const nm4 = clonePanel(answer); nm4.rows![2] = nm4.rows![2].map((e) => ({ ...e, fill: "outline" as Fill })); // fill wrong
+  return {
+    panels,
+    periods: [pCount, triPeriod, pShape],
+    ruleSummary:
+      "A structured three-row frame. Each row runs its own rule simultaneously: the top row of circles changes in COUNT, the middle triangles flip ORIENTATION, and the bottom shape CYCLES through a fixed set. Advance all three.",
+    nearMisses: [nm1, nm2, nm3, nm4],
+  };
+}
+
+// FRAME: pie-grid (EPSO Q9). Corners are quarter-circles rotating; a centre
+// shape cycles. Coprime periods: rotation period 4, shape-cycle period 3 =>
+// combined 12 (clears extreme).
+function framePieGrid(rng: () => number): BuiltItem {
+  const starts = [0, 1, 2, 3].map(() => Math.floor(rng() * 4));
+  const rot = pick(rng, [1, -1]);
+  const centreCycle = makeShapeCycle(rng, 3);
+  const q = (c: number, t: number) => ((starts[c] + t * rot) % 4 + 400) % 4;
+  const panelAt = (t: number): Panel => ({
+    layout: "pieCross",
+    slots: [
+      { shape: "pie", fill: "solid", quarter: q(0, t) },
+      { shape: "pie", fill: "solid", quarter: q(1, t) },
+      { shape: "pie", fill: "solid", quarter: q(2, t) },
+      { shape: "pie", fill: "solid", quarter: q(3, t) },
+      { shape: cycleAt(centreCycle, t), fill: "outline" },
+      { shape: cycleAt(centreCycle, t), fill: "solid" },
+    ],
+  });
+  const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
+  const answer = panels[5];
+  const nm1 = clonePanel(answer); { const e = nm1.slots[0]!; nm1.slots[0] = { ...e, quarter: (e.quarter! + 1) % 4 }; }
+  const nm2 = clonePanel(answer); nm2.slots[4] = { ...nm2.slots[4]!, shape: cycleAt(centreCycle, 6) };
+  const nm3 = clonePanel(answer); { const e = nm3.slots[2]!; nm3.slots[2] = { ...e, quarter: (e.quarter! + 2) % 4 }; }
+  const nm4 = clonePanel(answer); nm4.slots[5] = { ...nm4.slots[5]!, fill: "outline" as Fill };
+  return {
+    panels,
+    periods: [4, 3], // rotation vs shape-cycle, coprime
+    ruleSummary:
+      "A pie-grid frame: the four corner quarter-circles rotate together each step, and the two centre shapes cycle through a 3-shape sequence (top outline, bottom solid). Track rotation and the shape-cycle at once.",
+    nearMisses: [nm1, nm2, nm3, nm4],
+  };
+}
+
+// FRAME: 8-segment square (EPSO Q4). Fill patterns rotate (period 8/ gcd) and a
+// dot travels (period 8). Combined long. Already dense and structured.
+function frameSegments(rng: () => number): BuiltItem {
+  const base: SegPattern[] = Array.from({ length: 8 }, (_, i) => SEG_PATTERNS[i % SEG_PATTERNS.length]);
+  const rot = pick(rng, [1, -1]);
+  const dotStep = pick(rng, [1, -1]);
+  const dotStart = Math.floor(rng() * 8);
+  const panelAt = (t: number): Panel => ({
+    layout: "segments",
+    slots: [],
+    segments: base.map((_, k) => base[((k - t * rot) % 8 + 800) % 8]),
+    dotPos: ((dotStart + t * dotStep) % 8 + 8) % 8,
+  });
+  const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
+  const answer = panels[5];
+  const nm1 = { ...clonePanel(answer), dotPos: ((answer.dotPos ?? 0) + 1) % 8 };
+  const nm2 = { ...clonePanel(answer), dotPos: ((answer.dotPos ?? 0) + 4) % 8 };
+  const nm3 = clonePanel(panelAt(4)); // rotation off by one
+  const nm4 = { ...clonePanel(answer), segments: base.map((_, k) => base[((k - 6 * -rot) % 8 + 800) % 8]) };
+  // period of the pattern rotation: 8 / gcd(8, cycleLen). SEG_PATTERNS len 4 so
+  // the pattern array has period 4 under rotation; dot has period 8. lcm = 8.
+  return {
+    panels,
+    periods: [4, 8],
+    ruleSummary:
+      "An eight-segment square. The fill patterns rotate one segment per step, and the dot travels around the segments each step. Track both the rotating fills and the moving dot.",
+    nearMisses: [nm1, nm2, nm3, nm4],
+  };
+}
+
+// FRAME: coupled cross (hard/extreme). A marker ORBITS the 4 cross arms
+// (period 4); its FILL is COUPLED to its position (solid on N/S arms, outline
+// on E/W). A centre shape cycles (period 3). Coupling + coprime periods.
+function frameCoupledCross(rng: () => number): BuiltItem {
+  const posStep = pick(rng, [1, -1]);
+  const centreCycle = makeShapeCycle(rng, 3);
+  const markerShape = pick(rng, NON_ARROW);
+  // position -> fill coupling: arms 0(N),2(S) solid; 1(E),3(W) outline
+  const fillForPos = (pos: number): Fill => (pos % 2 === 0 ? "solid" : "outline");
+  const panelAt = (t: number): Panel => {
+    const pos = ((t * posStep) % 4 + 4) % 4;
+    const slots: (Element | null)[] = [null, null, null, null, null];
+    slots[pos] = { shape: markerShape, fill: fillForPos(pos) };
+    slots[4] = { shape: cycleAt(centreCycle, t), fill: "outline" };
+    return { layout: "cross", slots };
+  };
+  const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
+  const answer = panels[5];
+  const correctPos = ((5 * posStep) % 4 + 4) % 4;
+  const mk = (pos: number, fill: Fill, centre: ShapeKind): Panel => {
+    const slots: (Element | null)[] = [null, null, null, null, null];
+    slots[pos] = { shape: markerShape, fill };
+    slots[4] = { shape: centre, fill: "outline" };
+    return { layout: "cross", slots };
+  };
+  const centreNow = cycleAt(centreCycle, 5);
+  const nm1 = mk((correctPos + 1) % 4, fillForPos((correctPos + 1) % 4), centreNow); // position wrong (fill follows, so this is a position error)
+  const nm2 = mk(correctPos, fillForPos(correctPos) === "solid" ? "outline" : "solid", centreNow); // fill ignores the coupling
+  const nm3 = mk(correctPos, fillForPos(correctPos), cycleAt(centreCycle, 6)); // centre cycle wrong
+  const nm4 = mk((correctPos + 2) % 4, fillForPos((correctPos + 2) % 4), centreNow); // opposite arm
+  return {
+    panels,
+    periods: [4, 3], // orbit vs centre-cycle, coprime -> 12
+    ruleSummary:
+      "A coupled cross: the marker ORBITS the four arms each step, and its FILL is DETERMINED by where it lands — solid on the top/bottom arms, outline on the left/right arms. The centre shape cycles through three forms. Position must be found first, because it dictates the fill.",
+    nearMisses: [nm1, nm2, nm3, nm4],
+  };
+}
+
+// FRAME: easy single element with ONE rule of period >= 3 (arrow full rotation,
+// or shape cycle of 3). Still rigorous (period discipline) but one attribute.
+function frameEasy(rng: () => number): BuiltItem {
+  const mode = pick(rng, ["arrow", "shape"]);
+  if (mode === "arrow") {
+    const start = pick(rng, CW);
+    const step = pick(rng, [1, -1]);
+    const dirAt = (t: number) => rotateDir(start, t * step);
+    const panelAt = (t: number): Panel => ({ layout: "single", slots: [{ shape: "arrow", fill: "solid", direction: dirAt(t) }] });
+    const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
+    const answer = panels[5];
+    const nm: Panel[] = CW.filter((d) => d !== answer.slots[0]!.direction).map((d) => ({ layout: "single", slots: [{ shape: "arrow", fill: "solid", direction: d }] }));
+    // 3 distinct wrong directions + a repeat of panel 4
+    const nmArr = [nm[0], nm[1], nm[2], panelAt(4)].slice(0, 4);
+    return {
+      panels,
+      periods: [4],
+      ruleSummary: `The arrow rotates 90° ${step === 1 ? "clockwise" : "anticlockwise"} each step. Continue the rotation.`,
+      nearMisses: nmArr,
+    };
+  }
+  const cycle = makeShapeCycle(rng, 3);
+  const panelAt = (t: number): Panel => ({ layout: "single", slots: [{ shape: cycleAt(cycle, t), fill: t % 2 === 0 ? "solid" : "outline" }] });
+  const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
+  const answer = panels[5];
+  const nm1 = { layout: "single", slots: [{ ...answer.slots[0]!, shape: cycleAt(cycle, 6) }] } as Panel;
+  const nm2 = { layout: "single", slots: [{ ...answer.slots[0]!, fill: answer.slots[0]!.fill === "solid" ? "outline" : "solid" }] } as Panel;
+  const nm3 = panelAt(4);
+  const nm4 = { layout: "single", slots: [{ ...answer.slots[0]!, shape: cycleAt(cycle, 7) }] } as Panel;
+  return {
+    panels,
+    periods: [3],
+    ruleSummary: "The shape cycles through a fixed set of three AND the fill alternates. Continue both — note they go out of phase, so the figure only repeats every six steps.",
+    nearMisses: [nm1, nm2, nm3, nm4],
+  };
+}
+
+// FRAME: medium row-of-3 with two coprime-period attributes (shape-cycle period
+// 3, fill alternation period 2) over three positions, each offset — dense,
+// combined period 6.
+function frameMediumRow(rng: () => number): BuiltItem {
+  const cycle = makeShapeCycle(rng, 3);
+  const panelAt = (t: number): Panel => ({
+    layout: "row3",
+    slots: [0, 1, 2].map((pos) => ({
+      shape: cycleAt(cycle, t + pos),
+      fill: (t + pos) % 2 === 0 ? "solid" : "outline",
+    })),
+  });
+  const panels = [0, 1, 2, 3, 4, 5].map(panelAt);
+  const answer = panels[5];
+  const nm1 = clonePanel(answer); nm1.slots[0] = { ...nm1.slots[0]!, shape: cycleAt(cycle, 6 + 1) };
+  const nm2 = clonePanel(answer); nm2.slots[1] = { ...nm2.slots[1]!, fill: nm2.slots[1]!.fill === "solid" ? "outline" : "solid" };
+  const nm3 = clonePanel(answer); nm3.slots[2] = { ...nm3.slots[2]!, shape: cycleAt(cycle, 6 + 3) };
+  const nm4 = clonePanel(panelAt(4));
+  return {
+    panels,
+    periods: [3, 2], // coprime -> 6
+    ruleSummary:
+      "Three positions, each one step further along the SAME shape-cycle (period 3) with fill alternating (period 2). Because the two periods are coprime the whole row only repeats every six steps — advance each position by one.",
+    nearMisses: [nm1, nm2, nm3, nm4],
+  };
+}
+
 // ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
 type Generator = (rng: () => number, id: string) => AbstractQuestion;
 
-const TEMPLATES: Record<AbstractDifficulty, Generator[]> = {
+// Every tier uses the rigorous frame-based engine via buildValid, which
+// enforces the four invariants (period discipline, exactly-one-correct,
+// single-rule near-misses, uniqueness). Frames are dense and structured like
+// the real EPSO items (three-row, pie-grid, 8-segment, coupled cross).
+const TEMPLATES: Record<AbstractDifficulty, ((rng: () => number) => BuiltItem)[]> = {
   easy: [
-    genEasy,
-    genEasyFillCycle,
-    genEasyMove,
-    (rng, id) => genProgression(rng, id, "easy"),
+    frameEasy,
   ],
   medium: [
-    genMedium,
-    genMediumStack,
-    genMediumTwoArrows,
-    (rng, id) => genProgression(rng, id, "medium"),
-    (rng, id) => genReflection(rng, id, "medium"),
-    genCurves,
-    genPieRotation,
+    frameMediumRow,
+    frameThreeRow, // dense multi-row even at medium (uses period-3 count)
   ],
   hard: [
-    genHard,
-    genHardFlipTravel,
-    (rng, id) => genReflection(rng, id, "hard"),
-    genSegments,
-    genComposite3,
-    (rng, id) => genCompoundArrow(rng, id, "hard"),
-    (rng, id) => genCompoundOrbit(rng, id, "hard"),
+    frameThreeRow,
+    framePieGrid,
+    frameSegments,
+    frameCoupledCross,
   ],
   extreme: [
-    genExtremeComposite,
-    genExtremePieCross,
-    genExtremeOverlay,
-    genSegments, // the 8-segment square is genuinely extreme too
-    genComposite3,
-    (rng, id) => genCompoundArrow(rng, id, "extreme"),
-    (rng, id) => genCompoundOrbit(rng, id, "extreme"),
-    genInteractConditional,
-    genInteractCountDriven,
+    (rng) => frameThreeRow(rng, "extreme"),
+    framePieGrid,
+    frameSegments,
+    frameCoupledCross,
   ],
 };
 
@@ -1119,7 +1452,7 @@ export function generateAbstractQuestion(
   const s = seed ?? Math.floor(Math.random() * 1_000_000);
   const rng = makeRng(s);
   const id = `abstract-${difficulty}-${s}`;
-  const templates = TEMPLATES[difficulty];
-  const gen = templates[Math.floor(rng() * templates.length)];
-  return gen(rng, id);
+  const frames = TEMPLATES[difficulty];
+  const frame = frames[Math.floor(rng() * frames.length)];
+  return buildValid(rng, id, difficulty, () => frame(rng));
 }
