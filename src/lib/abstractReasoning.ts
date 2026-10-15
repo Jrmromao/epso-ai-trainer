@@ -970,6 +970,97 @@ function genCompoundOrbit(rng: () => number, id: string, difficulty: AbstractDif
 }
 
 // ----------------------------------------------------------------------------
+// INTERACTING-RULE templates — the hardest tier. Here one attribute CONTROLS
+// another, so you cannot decode the rules independently: you must work out the
+// controlling attribute first, then apply its effect. This is what makes real
+// EPSO extreme items resist feature-by-feature elimination.
+// ----------------------------------------------------------------------------
+
+// INTERACTING 1: CONDITIONAL ROTATION. A row of [controller shape][arrow]. The
+// controller's FILL decides the arrow's rotation DIRECTION this step: solid =>
+// clockwise, outline => anticlockwise. The controller's fill itself alternates,
+// so the arrow's turn direction flips every step — you must read the controller
+// before you can predict the arrow.
+function genInteractConditional(rng: () => number, id: string): AbstractQuestion {
+  const ctrlShape = pick(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie"));
+  const fillStart: Fill = pick(rng, ["solid", "outline"] as Fill[]);
+  let dir = pick(rng, CW);
+  const dirs: Direction[] = [];
+  const fills: Fill[] = [];
+  for (let i = 0; i < 6; i++) {
+    const fill: Fill = i % 2 === 0 ? fillStart : fillStart === "solid" ? "outline" : "solid";
+    fills.push(fill);
+    dirs.push(dir);
+    // apply the conditional turn for the NEXT step based on THIS fill
+    dir = rotateDir(dir, fill === "solid" ? 1 : -1);
+  }
+  const panelFor = (i: number): Panel => ({
+    layout: "row3",
+    slots: [{ shape: ctrlShape, fill: fills[i] }, null, { shape: "arrow", fill: "solid", direction: dirs[i] }],
+  });
+  const sequence = [0, 1, 2, 3, 4].map(panelFor);
+  const correct = panelFor(5);
+  const distractors: Panel[] = [
+    // arrow turned the WRONG way (as if ignoring the controller)
+    { layout: "row3", slots: [{ shape: ctrlShape, fill: fills[5] }, null, { shape: "arrow", fill: "solid", direction: rotateDir(dirs[4], fills[4] === "solid" ? -1 : 1) }] },
+    // controller fill wrong
+    { layout: "row3", slots: [{ shape: ctrlShape, fill: fills[5] === "solid" ? "outline" : "solid" }, null, { shape: "arrow", fill: "solid", direction: dirs[5] }] },
+    // arrow off by an extra 90
+    { layout: "row3", slots: [{ shape: ctrlShape, fill: fills[5] }, null, { shape: "arrow", fill: "solid", direction: rotateDir(dirs[5], 1) }] },
+    // repeat previous
+    panelFor(4),
+  ];
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "extreme", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary:
+      "Interacting rules: the left shape's FILL controls the arrow's turn — solid means it turns clockwise next, outline means anticlockwise. The fill alternates, so the turn direction flips each step. Read the controller first, then the arrow.",
+  };
+}
+
+// INTERACTING 2: COUNT-DRIVEN SHAPE. A row shows N dots; N increases each step,
+// and the SHAPE drawn is determined by N (odd count => triangle, even => square),
+// while fill is solid when N is a multiple of 3 else outline. One number drives
+// three visible features at once.
+function genInteractCountDriven(rng: () => number, id: string): AbstractQuestion {
+  const start = pick(rng, [1, 2]);
+  const n = (i: number) => start + i;
+  const shapeFor = (c: number): ShapeKind => (c % 2 === 1 ? "triangle" : "square");
+  const fillFor = (c: number): Fill => (c % 3 === 0 ? "solid" : "outline");
+  // left = the derived shape; bottom row = N small circles.
+  const build = (i: number): Panel => {
+    const c = n(i);
+    return {
+      layout: "composite3",
+      slots: [],
+      rows: [
+        [{ shape: shapeFor(c), fill: fillFor(c) }],
+        Array.from({ length: c }, () => ({ shape: "circle", fill: "solid" as Fill } as Element)),
+      ],
+    };
+  };
+  const sequence = [0, 1, 2, 3, 4].map(build);
+  const correctC = n(5);
+  const correct = build(5);
+  const distractors: Panel[] = [
+    // right count correct but left shape wrong (ignored the odd/even rule)
+    { layout: "composite3", slots: [], rows: [[{ shape: shapeFor(correctC) === "triangle" ? "square" : "triangle", fill: fillFor(correctC) }], correct.rows![1].map((e) => ({ ...e }))] },
+    // left fill wrong (ignored the multiple-of-3 rule)
+    { layout: "composite3", slots: [], rows: [[{ shape: shapeFor(correctC), fill: fillFor(correctC) === "solid" ? "outline" : "solid" }], correct.rows![1].map((e) => ({ ...e }))] },
+    // count off by one (and shape not updated to match)
+    build(4),
+    // count correct, shape+fill from the wrong count
+    { layout: "composite3", slots: [], rows: [[{ shape: shapeFor(correctC + 1), fill: fillFor(correctC + 1) }], correct.rows![1].map((e) => ({ ...e }))] },
+  ];
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "extreme", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary:
+      "The number of circles increases by one each step and DRIVES the top shape: odd count => triangle, even => square; and the shape is filled only when the count is a multiple of 3. Work out the count first, then derive the shape and fill from it.",
+  };
+}
+
+// ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
 type Generator = (rng: () => number, id: string) => AbstractQuestion;
@@ -1007,6 +1098,8 @@ const TEMPLATES: Record<AbstractDifficulty, Generator[]> = {
     genComposite3,
     (rng, id) => genCompoundArrow(rng, id, "extreme"),
     (rng, id) => genCompoundOrbit(rng, id, "extreme"),
+    genInteractConditional,
+    genInteractCountDriven,
   ],
 };
 
