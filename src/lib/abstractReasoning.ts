@@ -898,26 +898,27 @@ function genExtremeOverlay(rng: () => number, id: string): AbstractQuestion {
 function genCompoundArrow(rng: () => number, id: string, difficulty: AbstractDifficulty): AbstractQuestion {
   const start = pick(rng, CW);
   const rotStep = pick(rng, [1, -1]);
-  const fillStart: Fill = pick(rng, ["solid", "outline"] as Fill[]);
-  // a second shape in the row that cycles through shapes independently
+  // a shape that cycles through 3 shapes
   const satCycle = shuffleArr(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie")).slice(0, 3);
 
   const panelFor = (i: number): Panel => ({
     layout: "row3",
     slots: [
-      // left: shape that cycles AND alternates fill (two families on one element)
+      // left: shape cycles through 3 forms AND alternates fill (period 2) — the
+      // two sub-rules are out of phase (period 3 vs 2) so it only repeats every 6.
       { shape: satCycle[i % 3], fill: i % 2 === 0 ? "solid" : "outline" },
       null,
-      // right: arrow that rotates AND alternates fill
-      { shape: "arrow", fill: i % 2 === 0 ? fillStart : fillStart === "solid" ? "outline" : "solid", direction: rotateDir(start, i * rotStep) },
+      // right: arrow rotates a FULL quarter each step (all four headings appear),
+      // so it is a genuine rotation, not a two-state toggle.
+      { shape: "arrow", fill: "solid", direction: rotateDir(start, i * rotStep) },
     ],
   });
   const sequence = [0, 1, 2, 3, 4].map(panelFor);
   const correct = panelFor(5);
   const distractors: Panel[] = [];
-  // each near-miss breaks exactly ONE of the layered families
-  { const p = clonePanel(correct); const e = p.slots[2]!; p.slots[2] = { ...e, direction: rotateDir(e.direction!, 1) }; distractors.push(p); } // arrow rotation off
-  { const p = clonePanel(correct); const e = p.slots[2]!; p.slots[2] = { ...e, fill: e.fill === "solid" ? "outline" : "solid" }; distractors.push(p); } // arrow fill off
+  // each near-miss breaks exactly ONE sub-rule
+  { const p = clonePanel(correct); const e = p.slots[2]!; p.slots[2] = { ...e, direction: rotateDir(e.direction!, 1) }; distractors.push(p); } // arrow rotation off by one
+  { const p = clonePanel(correct); const e = p.slots[2]!; p.slots[2] = { ...e, direction: rotateDir(e.direction!, -1) }; distractors.push(p); } // arrow rotation off other way
   { const p = clonePanel(correct); const e = p.slots[0]!; p.slots[0] = { ...e, shape: satCycle[(5 + 1) % 3] }; distractors.push(p); } // left shape-cycle off
   { const p = clonePanel(correct); const e = p.slots[0]!; p.slots[0] = { ...e, fill: e.fill === "solid" ? "outline" : "solid" }; distractors.push(p); } // left fill off
   const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
@@ -977,86 +978,94 @@ function genCompoundOrbit(rng: () => number, id: string, difficulty: AbstractDif
 // ----------------------------------------------------------------------------
 
 // INTERACTING 1: CONDITIONAL ROTATION. A row of [controller shape][arrow]. The
-// controller's FILL decides the arrow's rotation DIRECTION this step: solid =>
-// clockwise, outline => anticlockwise. The controller's fill itself alternates,
-// so the arrow's turn direction flips every step — you must read the controller
-// before you can predict the arrow.
+// controller's FILL decides HOW FAR the arrow turns this step: solid => turn 2
+// quarters (180°), outline => turn 1 quarter (90°), always clockwise. The
+// controller's fill follows a non-obvious 3-step pattern (solid, outline,
+// outline) so the arrow's cumulative heading is NOT a simple cycle — you must
+// read each controller and add up the turns.
 function genInteractConditional(rng: () => number, id: string): AbstractQuestion {
   const ctrlShape = pick(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie"));
-  const fillStart: Fill = pick(rng, ["solid", "outline"] as Fill[]);
+  // non-trivial fill pattern, period 3: solid, outline, outline, ...
+  const fillPattern: Fill[] = ["solid", "outline", "outline"];
+  const fillAt = (i: number) => fillPattern[i % 3];
   let dir = pick(rng, CW);
   const dirs: Direction[] = [];
-  const fills: Fill[] = [];
   for (let i = 0; i < 6; i++) {
-    const fill: Fill = i % 2 === 0 ? fillStart : fillStart === "solid" ? "outline" : "solid";
-    fills.push(fill);
     dirs.push(dir);
-    // apply the conditional turn for the NEXT step based on THIS fill
-    dir = rotateDir(dir, fill === "solid" ? 1 : -1);
+    // turn depends on THIS panel's controller fill
+    dir = rotateDir(dir, fillAt(i) === "solid" ? 2 : 1);
   }
   const panelFor = (i: number): Panel => ({
     layout: "row3",
-    slots: [{ shape: ctrlShape, fill: fills[i] }, null, { shape: "arrow", fill: "solid", direction: dirs[i] }],
+    slots: [{ shape: ctrlShape, fill: fillAt(i) }, null, { shape: "arrow", fill: "solid", direction: dirs[i] }],
   });
   const sequence = [0, 1, 2, 3, 4].map(panelFor);
   const correct = panelFor(5);
   const distractors: Panel[] = [
-    // arrow turned the WRONG way (as if ignoring the controller)
-    { layout: "row3", slots: [{ shape: ctrlShape, fill: fills[5] }, null, { shape: "arrow", fill: "solid", direction: rotateDir(dirs[4], fills[4] === "solid" ? -1 : 1) }] },
+    // treated solid as 90° instead of 180° (ignored the controller's effect)
+    { layout: "row3", slots: [{ shape: ctrlShape, fill: fillAt(5) }, null, { shape: "arrow", fill: "solid", direction: rotateDir(dirs[4], 1) }] },
     // controller fill wrong
-    { layout: "row3", slots: [{ shape: ctrlShape, fill: fills[5] === "solid" ? "outline" : "solid" }, null, { shape: "arrow", fill: "solid", direction: dirs[5] }] },
-    // arrow off by an extra 90
-    { layout: "row3", slots: [{ shape: ctrlShape, fill: fills[5] }, null, { shape: "arrow", fill: "solid", direction: rotateDir(dirs[5], 1) }] },
-    // repeat previous
-    panelFor(4),
+    { layout: "row3", slots: [{ shape: ctrlShape, fill: fillAt(5) === "solid" ? "outline" : "solid" }, null, { shape: "arrow", fill: "solid", direction: dirs[5] }] },
+    // arrow off by one quarter
+    { layout: "row3", slots: [{ shape: ctrlShape, fill: fillAt(5) }, null, { shape: "arrow", fill: "solid", direction: rotateDir(dirs[5], 1) }] },
+    // arrow off the other way
+    { layout: "row3", slots: [{ shape: ctrlShape, fill: fillAt(5) }, null, { shape: "arrow", fill: "solid", direction: rotateDir(dirs[5], -1) }] },
   ];
   const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
   return {
     id, difficulty: "extreme", sequence, options: sh.options, answerIndex: sh.answerIndex,
     ruleSummary:
-      "Interacting rules: the left shape's FILL controls the arrow's turn — solid means it turns clockwise next, outline means anticlockwise. The fill alternates, so the turn direction flips each step. Read the controller first, then the arrow.",
+      "Interacting rules: the left shape's FILL sets how far the arrow turns clockwise that step — solid = 180° (two quarters), outline = 90° (one quarter). The fill runs solid, outline, outline, repeating, so the arrow's heading is NOT a simple cycle: add up the turns step by step.",
   };
 }
 
-// INTERACTING 2: COUNT-DRIVEN SHAPE. A row shows N dots; N increases each step,
-// and the SHAPE drawn is determined by N (odd count => triangle, even => square),
-// while fill is solid when N is a multiple of 3 else outline. One number drives
-// three visible features at once.
+// INTERACTING 2: COUNT-DRIVEN SHAPE. A bottom row of N dots where N follows a
+// non-linear sequence (1, 2, 4, 7, 11 — differences grow by 1), and the top
+// shape is driven by N: odd => triangle, even => square; filled only when N is
+// prime. One number drives three features, and the count itself isn't a trivial
+// +1 each time.
 function genInteractCountDriven(rng: () => number, id: string): AbstractQuestion {
-  const start = pick(rng, [1, 2]);
-  const n = (i: number) => start + i;
+  // triangular-ish growth: differences 1,2,3,4,5 -> counts 1,2,4,7,11,16
+  const counts = [1, 2, 4, 7, 11, 16];
   const shapeFor = (c: number): ShapeKind => (c % 2 === 1 ? "triangle" : "square");
-  const fillFor = (c: number): Fill => (c % 3 === 0 ? "solid" : "outline");
-  // left = the derived shape; bottom row = N small circles.
+  const isPrime = (n: number) => {
+    if (n < 2) return false;
+    for (let d = 2; d * d <= n; d++) if (n % d === 0) return false;
+    return true;
+  };
+  const fillFor = (c: number): Fill => (isPrime(c) ? "solid" : "outline");
+  // cap the drawn dots so the panel stays legible — show count as a numeral-free
+  // grid but limit to 9; above that we still vary shape/fill from the true count.
+  const dotsFor = (c: number) => Math.min(9, c);
   const build = (i: number): Panel => {
-    const c = n(i);
+    const c = counts[i];
     return {
       layout: "composite3",
       slots: [],
       rows: [
         [{ shape: shapeFor(c), fill: fillFor(c) }],
-        Array.from({ length: c }, () => ({ shape: "circle", fill: "solid" as Fill } as Element)),
+        Array.from({ length: dotsFor(c) }, () => ({ shape: "circle", fill: "solid" as Fill } as Element)),
       ],
     };
   };
   const sequence = [0, 1, 2, 3, 4].map(build);
-  const correctC = n(5);
+  const cc = counts[5]; // 16 -> even/square, not prime/outline
   const correct = build(5);
   const distractors: Panel[] = [
-    // right count correct but left shape wrong (ignored the odd/even rule)
-    { layout: "composite3", slots: [], rows: [[{ shape: shapeFor(correctC) === "triangle" ? "square" : "triangle", fill: fillFor(correctC) }], correct.rows![1].map((e) => ({ ...e }))] },
-    // left fill wrong (ignored the multiple-of-3 rule)
-    { layout: "composite3", slots: [], rows: [[{ shape: shapeFor(correctC), fill: fillFor(correctC) === "solid" ? "outline" : "solid" }], correct.rows![1].map((e) => ({ ...e }))] },
-    // count off by one (and shape not updated to match)
-    build(4),
-    // count correct, shape+fill from the wrong count
-    { layout: "composite3", slots: [], rows: [[{ shape: shapeFor(correctC + 1), fill: fillFor(correctC + 1) }], correct.rows![1].map((e) => ({ ...e }))] },
+    // shape derived from wrong parity
+    { layout: "composite3", slots: [], rows: [[{ shape: shapeFor(cc) === "triangle" ? "square" : "triangle", fill: fillFor(cc) }], correct.rows![1].map((e) => ({ ...e }))] },
+    // fill wrong (treated as prime)
+    { layout: "composite3", slots: [], rows: [[{ shape: shapeFor(cc), fill: fillFor(cc) === "solid" ? "outline" : "solid" }], correct.rows![1].map((e) => ({ ...e }))] },
+    // used a linear +1 count (11+1=12 dots capped to 9) with its shape
+    { layout: "composite3", slots: [], rows: [[{ shape: shapeFor(12), fill: fillFor(12) }], Array.from({ length: Math.min(9, 12) }, () => ({ shape: "circle", fill: "solid" as Fill } as Element))] },
+    // correct count dots but shape+fill from previous step
+    { layout: "composite3", slots: [], rows: [[{ shape: shapeFor(counts[4]), fill: fillFor(counts[4]) }], correct.rows![1].map((e) => ({ ...e }))] },
   ];
   const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
   return {
     id, difficulty: "extreme", sequence, options: sh.options, answerIndex: sh.answerIndex,
     ruleSummary:
-      "The number of circles increases by one each step and DRIVES the top shape: odd count => triangle, even => square; and the shape is filled only when the count is a multiple of 3. Work out the count first, then derive the shape and fill from it.",
+      "The dot count grows by an increasing step (1, 2, 4, 7, 11, …, differences +1 each time), and the count DRIVES the top shape: odd => triangle, even => square, filled only when the count is prime. Find the next count, then derive the shape and fill.",
   };
 }
 
