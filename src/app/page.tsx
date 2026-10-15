@@ -23,16 +23,29 @@ function countFor(topic: Topic): number {
   return SEED_QUESTIONS.filter((q) => q.topic === topic).length;
 }
 
-function TopicCard({ topic }: { topic: Topic }) {
+function TopicCard({ topic, withStudy }: { topic: Topic; withStudy?: boolean }) {
   const n = countFor(topic);
   return (
-    <Link
-      href={`/mock/${topic}`}
-      className="block rounded-lg border border-neutral-300 bg-white p-4 transition hover:border-neutral-900 hover:shadow-sm"
-    >
+    <div className="rounded-lg border border-neutral-300 bg-white p-4 transition hover:border-neutral-900 hover:shadow-sm">
       <div className="font-semibold">{TOPIC_LABELS[topic]}</div>
       <div className="mt-1 text-sm text-neutral-500">{n} question{n === 1 ? "" : "s"} seeded</div>
-    </Link>
+      <div className="mt-3 flex gap-2">
+        {withStudy && (
+          <Link
+            href={`/study/${topic}`}
+            className="rounded border border-neutral-900 px-3 py-1 text-xs font-medium text-neutral-900 hover:bg-neutral-100"
+          >
+            Study
+          </Link>
+        )}
+        <Link
+          href={`/mock/${topic}`}
+          className="rounded bg-neutral-900 px-3 py-1 text-xs font-medium text-white"
+        >
+          Timed mock
+        </Link>
+      </div>
+    </div>
   );
 }
 
@@ -145,9 +158,13 @@ export default function Home() {
       <ProgressTools />
 
       <h2 className="mt-8 text-lg font-semibold">Field knowledge (the ranking test)</h2>
+      <p className="mt-1 text-sm text-neutral-500">
+        Study the concepts first, then take a timed mock. This is the test that
+        decides your reserve-list rank.
+      </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {FIELD_TOPICS.map((t) => (
-          <TopicCard key={t} topic={t} />
+          <TopicCard key={t} topic={t} withStudy />
         ))}
       </div>
 
