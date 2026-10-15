@@ -5,7 +5,6 @@ import type { ChoiceKey, Difficulty, Question, QuestionLanguage } from "@/lib/ty
 import { type AbstractDifficulty, type AbstractQuestion, generateAbstractQuestion } from "@/lib/abstractReasoning";
 import AbstractPanel from "@/components/AbstractPanel";
 import QuestionTableView from "@/components/QuestionTableView";
-import QuestionTimer from "@/components/QuestionTimer";
 import { SECONDS_PER_QUESTION } from "@/lib/timing";
 import { llmHeaders } from "@/lib/userKey";
 
@@ -32,6 +31,12 @@ const SECTION_BUDGET: Record<Section, number> = {
   abstract: SECONDS_PER_QUESTION.abstract,
 };
 
+function fmt(sec: number): string {
+  const m = Math.floor(Math.max(0, sec) / 60);
+  const s = Math.max(0, sec) % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export default function ReasoningExamRunner() {
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [language, setLanguage] = useState<QuestionLanguage>("pt-PT");
@@ -46,14 +51,15 @@ export default function ReasoningExamRunner() {
   // run state
   const [started, setStarted] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [practice, setPractice] = useState(false); // live feedback when true
   const [sectionIdx, setSectionIdx] = useState(0);
   const [qIdx, setQIdx] = useState(0);
   // Answers stored per question: key `${sectionIdx}:${qIdx}` -> option index.
-  // This lets the candidate navigate freely and revise within a section.
   const [answers, setAnswers] = useState<Record<string, number>>({});
-  // Section-level countdown (EPSO gives a total time per section; you navigate
-  // freely within it). budget * question-count.
-  const [sectionLeft, setSectionLeft] = useState(0);
+  // Overall test timer (counts down across the whole 40) + per-question elapsed
+  // timer (counts up, a soft pace indicator, resets per question).
+  const [overallLeft, setOverallLeft] = useState(0);
+  const [qElapsed, setQElapsed] = useState(0);
 
   const section = SECTION_ORDER[sectionIdx];
   const perQBudget = SECTION_BUDGET[section];
@@ -78,30 +84,45 @@ export default function ReasoningExamRunner() {
     return keys.indexOf(q.answer);
   }
 
-  // Move to the next section (or finish). Locks the current section.
+  // Total test time = sum of all section budgets × their question counts.
+  function totalTestSeconds(): number {
+    return SECTION_ORDER.reduce((sum, s) => sum + SECTION_BUDGET[s] * SECTION_COUNT[s], 0);
+  }
+
+  // Move to the next section (or finish).
   const nextSection = useCallback(() => {
     if (sectionIdx + 1 < SECTION_ORDER.length) {
-      const ns = sectionIdx + 1;
-      const nextSec = SECTION_ORDER[ns];
-      const nextQs = nextSec === "verbal" ? verbal : nextSec === "numerical" ? numerical : abstract;
-      setSectionIdx(ns);
+      setSectionIdx((s) => s + 1);
       setQIdx(0);
-      setSectionLeft(SECTION_BUDGET[nextSec] * nextQs.length);
+      setQElapsed(0);
     } else {
       setFinished(true);
     }
-  }, [sectionIdx, verbal, numerical, abstract]);
+  }, [sectionIdx]);
 
-  // Section-level countdown; hitting zero ends the section (answers kept).
+  // Overall test countdown; hitting zero ends the whole test.
   useEffect(() => {
     if (!started || finished) return;
-    if (sectionLeft <= 0) {
-      nextSection();
+    if (overallLeft <= 0) {
+      setFinished(true);
       return;
     }
-    const t = setTimeout(() => setSectionLeft((s) => s - 1), 1000);
+    const t = setTimeout(() => setOverallLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [sectionLeft, started, finished, nextSection]);
+  }, [overallLeft, started, finished]);
+
+  // Per-question elapsed timer (counts up; soft pace indicator). Resets when
+  // the question changes.
+  useEffect(() => {
+    if (!started || finished) return;
+    const t = setTimeout(() => setQElapsed((s) => s + 1), 1000);
+    return () => clearTimeout(t);
+  }, [qElapsed, started, finished]);
+
+  // Reset the per-question elapsed timer whenever the question changes.
+  useEffect(() => {
+    setQElapsed(0);
+  }, [sectionIdx, qIdx]);
 
   async function start() {
     setLoading(true);
@@ -129,7 +150,8 @@ export default function ReasoningExamRunner() {
       setAnswers({});
       setSectionIdx(0);
       setQIdx(0);
-      setSectionLeft(SECTION_BUDGET.verbal * (v.length || SECTION_COUNT.verbal));
+      setQElapsed(0);
+      setOverallLeft(totalTestSeconds());
       setStarted(true);
       setFinished(false);
     } catch {
@@ -176,6 +198,14 @@ export default function ReasoningExamRunner() {
             </select>
           </label>
         </div>
+        <label className="mt-3 flex items-center gap-2 text-sm text-neutral-700">
+          <input type="checkbox" checked={practice} onChange={(e) => setPractice(e.target.checked)} />
+          <span>
+            <strong>Practice mode</strong> — tells you immediately whether each answer
+            is right or wrong, with the explanation. Off = exam mode (no feedback
+            until the end).
+          </span>
+        </label>
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         <button
           onClick={start}
@@ -238,27 +268,67 @@ export default function ReasoningExamRunner() {
   const answeredInSection = Array.from({ length: totalInSection }, (_, i) => answers[`${sectionIdx}:${i}`] !== undefined);
   const answeredCount = answeredInSection.filter(Boolean).length;
   const isLastSection = sectionIdx + 1 >= SECTION_ORDER.length;
+  // Live feedback (practice mode only): once an answer is picked, is it correct?
+  const correctIdx = correctIndexFor(section, qIdx);
+  const showFeedback = practice && chosen !== null;
+  const totalTime = totalTestSeconds();
 
   return (
     <div className="mt-6">
-      {/* Section header + section-level timer */}
+      {/* Header: section + overall & per-question timers */}
       <div className="flex items-center justify-between text-sm text-neutral-500">
         <span>
           <span className="font-semibold text-neutral-800">{SECTION_LABEL[section]}</span>{" "}
           · Q {qIdx + 1}/{totalInSection} · {answeredCount} answered
         </span>
-        <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs">Section {sectionIdx + 1}/3</span>
+        <div className="flex items-center gap-3">
+          {practice && (
+            <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Practice</span>
+          )}
+          <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs">Section {sectionIdx + 1}/3</span>
+        </div>
       </div>
-      <QuestionTimer secondsLeft={sectionLeft} budget={perQBudget * totalInSection} label="Time left in this section" />
+
+      {/* Two timers: overall countdown + per-question elapsed */}
+      <div className="mt-2 flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3 text-sm">
+        <div>
+          <div className="text-xs text-neutral-500">Overall test</div>
+          <div className={`text-lg font-bold tabular-nums ${overallLeft <= 120 ? "text-red-600" : overallLeft <= 300 ? "text-amber-600" : "text-green-700"}`}>
+            {fmt(overallLeft)} <span className="text-xs font-normal text-neutral-400">/ {fmt(totalTime)}</span>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-neutral-500">This question (target {perQBudget}s)</div>
+          <div className={`text-lg font-bold tabular-nums ${qElapsed > perQBudget * 1.5 ? "text-red-600" : qElapsed >= perQBudget ? "text-amber-600" : "text-green-700"}`}>
+            {qElapsed}s
+          </div>
+        </div>
+      </div>
 
       {/* Question body */}
       <div className="mt-4">
         {section === "abstract" ? (
-          <AbstractQ q={abstract[qIdx]} chosen={chosen} onPick={pick} />
+          <AbstractQ q={abstract[qIdx]} chosen={chosen} onPick={pick} revealIdx={showFeedback ? correctIdx : null} />
         ) : (
-          <McqQ q={(section === "verbal" ? verbal : numerical)[qIdx]} chosen={chosen} onPick={pick} />
+          <McqQ q={(section === "verbal" ? verbal : numerical)[qIdx]} chosen={chosen} onPick={pick} revealIdx={showFeedback ? correctIdx : null} />
         )}
       </div>
+
+      {/* Live feedback in practice mode */}
+      {showFeedback && (
+        <div className={`mt-3 rounded-lg border p-3 text-sm ${chosen === correctIdx ? "border-green-300 bg-green-50 text-green-900" : "border-red-300 bg-red-50 text-red-900"}`}>
+          <span className="font-semibold">
+            {chosen === correctIdx ? "✓ Correct" : `✗ Incorrect — answer is ${OPTION_LETTERS[correctIdx]}`}
+          </span>
+          {section !== "abstract" && (() => {
+            const q = (section === "verbal" ? verbal : numerical)[qIdx];
+            return q?.explanation ? <p className="mt-1 text-neutral-700">{q.explanation}</p> : null;
+          })()}
+          {section === "abstract" && abstract[qIdx]?.ruleSummary && (
+            <p className="mt-1 text-neutral-700">{abstract[qIdx].ruleSummary}</p>
+          )}
+        </div>
+      )}
 
       {/* Prev / Next navigation */}
       <div className="mt-5 flex items-center justify-between">
@@ -306,37 +376,44 @@ export default function ReasoningExamRunner() {
   );
 }
 
-// MCQ question (verbal / numerical) — chosen is an option index.
-function McqQ({ q, chosen, onPick }: { q: Question; chosen: number | null; onPick: (i: number) => void }) {
+// MCQ question (verbal / numerical). revealIdx!=null shows correct/wrong colours.
+function McqQ({ q, chosen, onPick, revealIdx }: { q: Question; chosen: number | null; onPick: (i: number) => void; revealIdx: number | null }) {
   if (!q) return null;
   const keys = CHOICE_KEYS.filter((k) => {
     const label = q.choices[k];
     return label && label !== "-" && label !== "(unused)";
   });
+  const revealed = revealIdx !== null;
   return (
     <div>
       {q.table && <QuestionTableView table={q.table} />}
       <p className="mt-2 whitespace-pre-line font-medium">{q.stem}</p>
       <div className="mt-3 space-y-2">
-        {keys.map((k, i) => (
-          <button
-            key={k}
-            onClick={() => onPick(i)}
-            className={`block w-full rounded border p-3 text-left transition ${
-              chosen === i ? "border-neutral-900 ring-2 ring-neutral-900" : "border-neutral-300 bg-white hover:border-neutral-900"
-            }`}
-          >
-            <span className="font-semibold">{OPTION_LETTERS[i]}.</span> {q.choices[k]}
-          </button>
-        ))}
+        {keys.map((k, i) => {
+          let cls = "border-neutral-300 bg-white hover:border-neutral-900";
+          if (revealed && i === revealIdx) cls = "border-green-500 bg-green-50";
+          else if (revealed && i === chosen) cls = "border-red-500 bg-red-50";
+          else if (!revealed && chosen === i) cls = "border-neutral-900 ring-2 ring-neutral-900";
+          return (
+            <button
+              key={k}
+              disabled={revealed}
+              onClick={() => onPick(i)}
+              className={`block w-full rounded border p-3 text-left transition ${cls}`}
+            >
+              <span className="font-semibold">{OPTION_LETTERS[i]}.</span> {q.choices[k]}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// Abstract question — chosen is the option index.
-function AbstractQ({ q, chosen, onPick }: { q: AbstractQuestion; chosen: number | null; onPick: (i: number) => void }) {
+// Abstract question. revealIdx!=null shows correct/wrong colours.
+function AbstractQ({ q, chosen, onPick, revealIdx }: { q: AbstractQuestion; chosen: number | null; onPick: (i: number) => void; revealIdx: number | null }) {
   if (!q) return null;
+  const revealed = revealIdx !== null;
   return (
     <div>
       <p className="font-medium">Which figure completes the pattern?</p>
@@ -349,18 +426,23 @@ function AbstractQ({ q, chosen, onPick }: { q: AbstractQuestion; chosen: number 
         </div>
       </div>
       <div className="mt-4 grid grid-cols-5 gap-2">
-        {q.options.map((p, i) => (
-          <button
-            key={i}
-            onClick={() => onPick(i)}
-            className={`flex flex-col items-center gap-1 rounded-lg border p-2 transition ${
-              chosen === i ? "border-neutral-900 ring-2 ring-neutral-900" : "border-neutral-300"
-            }`}
-          >
-            <span className="text-xs font-semibold text-neutral-600">{OPTION_LETTERS[i]}</span>
-            <AbstractPanel panel={p} size={82} />
-          </button>
-        ))}
+        {q.options.map((p, i) => {
+          let cls = "border-neutral-300";
+          if (revealed && i === revealIdx) cls = "border-green-500 ring-2 ring-green-500";
+          else if (revealed && i === chosen) cls = "border-red-500 ring-2 ring-red-500";
+          else if (!revealed && chosen === i) cls = "border-neutral-900 ring-2 ring-neutral-900";
+          return (
+            <button
+              key={i}
+              disabled={revealed}
+              onClick={() => onPick(i)}
+              className={`flex flex-col items-center gap-1 rounded-lg border p-2 transition ${cls}`}
+            >
+              <span className="text-xs font-semibold text-neutral-600">{OPTION_LETTERS[i]}</span>
+              <AbstractPanel panel={p} size={82} />
+            </button>
+          );
+        })}
       </div>
     </div>
   );
