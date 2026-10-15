@@ -17,21 +17,11 @@ import { useTestReview } from "@/lib/useTestReview";
 import { llmHeaders } from "@/lib/userKey";
 import Calculator from "@/components/Calculator";
 import QuestionTableView from "@/components/QuestionTableView";
-
-const SECONDS_PER_QUESTION = 80; // field MCQ default — overridden per topic below
-
-// Real EPSO timing per topic (total session seconds).
-// Verbal: 20Q / 35 min. Numerical: 10Q / 20 min. Field MCQ: 30Q / 40 min.
-// For mock sessions we scale proportionally to however many questions are loaded.
-const SESSION_SECONDS_PER_Q: Partial<Record<Topic, number>> = {
-  verbal:     105, // 35 min / 20 Q
-  "verbal-rc": 105,
-  numerical:  120, // 20 min / 10 Q
-};
+import QuestionTimer from "@/components/QuestionTimer";
+import { budgetForTopic } from "@/lib/timing";
 
 function sessionSecondsForTopic(topic: Topic, count: number): number {
-  const perQ = SESSION_SECONDS_PER_Q[topic] ?? SECONDS_PER_QUESTION;
-  return perQ * count;
+  return budgetForTopic(topic) * count;
 }
 
 function fmt(sec: number): string {
@@ -90,7 +80,7 @@ export default function MockRunner({
   questions: Question[];
 }) {
   const totalSessionSeconds = sessionSecondsForTopic(topic, questions.length);
-  const perQSeconds = SESSION_SECONDS_PER_Q[topic] ?? SECONDS_PER_QUESTION;
+  const perQSeconds = budgetForTopic(topic);
 
   const [index, setIndex] = useState(0);
   const [chosen, setChosen] = useState<ChoiceKey | null>(null);
@@ -235,7 +225,7 @@ export default function MockRunner({
       {/* Session timer bar */}
       <div className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3 text-sm">
         <div>
-          <div className="text-xs text-neutral-500">Session</div>
+          <div className="text-xs text-neutral-500">Session total</div>
           <div className={`text-lg font-bold tabular-nums ${overallColor(sessionLeft, totalSessionSeconds)}`}>
             {fmt(sessionLeft)}
           </div>
@@ -243,13 +233,10 @@ export default function MockRunner({
         <div className="text-center text-neutral-500">
           Q {index + 1} / {questions.length}
         </div>
-        <div className="text-right">
-          <div className="text-xs text-neutral-500">This question</div>
-          <div className={`text-lg font-bold tabular-nums ${secondsLeft <= 10 ? "text-red-600" : secondsLeft <= perQSeconds * 0.25 ? "text-amber-600" : "text-green-700"}`}>
-            {secondsLeft}s
-          </div>
-        </div>
       </div>
+
+      {/* Shared per-question timer bar (budget = this topic's EPSO pace) */}
+      <QuestionTimer secondsLeft={secondsLeft} budget={perQSeconds} />
 
       {current.table && <QuestionTableView table={current.table} />}
       <div className="mt-3 flex items-center gap-2">

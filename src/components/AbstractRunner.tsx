@@ -7,11 +7,13 @@ import {
   generateAbstractQuestion,
 } from "@/lib/abstractReasoning";
 import AbstractPanel from "@/components/AbstractPanel";
+import QuestionTimer from "@/components/QuestionTimer";
+import { SECONDS_PER_QUESTION } from "@/lib/timing";
 
 // Abstract reasoning practice runner. Fully deterministic — no LLM, no network.
 // Real EPSO abstract timing is 60s per question (10 questions / 10 minutes).
 
-const SECONDS_PER_Q = 60;
+const SECONDS_PER_Q = SECONDS_PER_QUESTION.abstract;
 const OPTION_LETTERS = ["A", "B", "C", "D", "E"];
 
 const DIFFICULTY_BADGE: Record<AbstractDifficulty, { label: string; cls: string }> = {
@@ -191,28 +193,15 @@ export default function AbstractRunner() {
       {/* Header */}
       <div className="flex items-center justify-between text-sm text-neutral-500">
         <span>Question {index + 1} / {questions.length}</span>
-        <div className="flex items-center gap-2">
-          {strict && (
-            <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600">
-              Exam timing
-            </span>
-          )}
-          <span className={`rounded px-2 py-0.5 text-xs font-medium ${badge.cls}`}>{badge.label}</span>
-          <span className={`font-semibold tabular-nums ${secondsLeft <= 10 ? "text-red-600" : "text-neutral-700"}`}>
-            {secondsLeft}s
-          </span>
-        </div>
+        <span className={`rounded px-2 py-0.5 text-xs font-medium ${badge.cls}`}>{badge.label}</span>
       </div>
 
-      {/* Timer progress bar */}
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200">
-        <div
-          className={`h-full transition-[width] duration-1000 ease-linear ${
-            secondsLeft <= 10 ? "bg-red-500" : secondsLeft <= 20 ? "bg-amber-500" : "bg-green-600"
-          }`}
-          style={{ width: `${(secondsLeft / SECONDS_PER_Q) * 100}%` }}
-        />
-      </div>
+      {/* Shared per-question timer bar */}
+      <QuestionTimer
+        secondsLeft={secondsLeft}
+        budget={SECONDS_PER_Q}
+        label={strict ? "Exam timing — auto-advances at 0" : "Time for this question"}
+      />
 
       {/* Sequence */}
       <p className="mt-4 font-medium">Which figure completes the pattern?</p>

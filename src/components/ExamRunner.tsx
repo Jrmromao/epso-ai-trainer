@@ -13,10 +13,12 @@ import { useMockHistory } from "@/lib/useMockHistory";
 import { useProgress } from "@/lib/useProgress";
 import { useTestReview } from "@/lib/useTestReview";
 import { llmHeaders } from "@/lib/userKey";
+import QuestionTimer from "@/components/QuestionTimer";
+import { SECONDS_PER_QUESTION } from "@/lib/timing";
 
 const CHOICE_KEYS: ChoiceKey[] = ["A", "B", "C", "D", "E"];
 const PASS_MARK = 15;
-const PER_Q_TARGET = 80;
+const PER_Q_TARGET = SECONDS_PER_QUESTION["field-ai"]; // 80s soft pace
 
 // Full static class strings so Tailwind doesn't purge them.
 const DIFFICULTY_BADGE: Record<Difficulty, { label: string; cls: string }> = {
@@ -35,13 +37,6 @@ function fmt(sec: number): string {
 function overallColor(sec: number): string {
   if (sec <= 120) return "text-red-600";
   if (sec <= 600) return "text-amber-600";
-  return "text-green-700";
-}
-
-// Per-question soft colour: green < target, amber target..1.5x, red beyond.
-function perQColor(sec: number): string {
-  if (sec > PER_Q_TARGET * 1.5) return "text-red-600";
-  if (sec >= PER_Q_TARGET) return "text-amber-600";
   return "text-green-700";
 }
 
@@ -246,7 +241,7 @@ export default function ExamRunner({
       {/* Timers */}
       <div className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3">
         <div>
-          <div className="text-xs text-neutral-500">Overall</div>
+          <div className="text-xs text-neutral-500">Overall exam</div>
           <div className={`text-xl font-bold tabular-nums ${overallColor(overallLeft)}`}>
             {fmt(overallLeft)}
           </div>
@@ -254,13 +249,14 @@ export default function ExamRunner({
         <div className="text-center text-sm text-neutral-500">
           Q {index + 1}/{questions.length} · {answered} answered
         </div>
-        <div className="text-right">
-          <div className="text-xs text-neutral-500">This question</div>
-          <div className={`text-xl font-bold tabular-nums ${perQColor(qElapsed)}`}>
-            {fmt(qElapsed)}
-          </div>
-        </div>
       </div>
+
+      {/* Shared per-question pace bar (soft ~80s target; counts the budget down) */}
+      <QuestionTimer
+        secondsLeft={Math.max(0, PER_Q_TARGET - qElapsed)}
+        budget={PER_Q_TARGET}
+        label="Pace target for this question"
+      />
 
       {/* Question */}
       <div className="mt-4 flex items-center gap-2">
