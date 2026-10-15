@@ -10,21 +10,23 @@ function Shape({ el, cx, cy, size }: { el: Element; cx: number; cy: number; size
   const fillColor = el.fill === "solid" ? "#111827" : "none";
   const stroke = "#111827";
   const sw = 2;
-  const r = size / 2;
-
+  const r = (size / 2) * (el.scale ?? 1);
+  // A reflected element is mirrored horizontally about its own centre.
+  const inner = ((): ReactNode => {
   switch (el.shape) {
     case "circle":
       return <circle cx={cx} cy={cy} r={r} fill={fillColor} stroke={stroke} strokeWidth={sw} />;
     case "square":
       return (
-        <rect x={cx - r} y={cy - r} width={size} height={size} fill={fillColor} stroke={stroke} strokeWidth={sw} />
+        <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2} fill={fillColor} stroke={stroke} strokeWidth={sw} />
       );
     case "triangle": {
-      // honour `tri` orientation (up default, down if set)
+      // honour `tri` orientation (up default, down if set); mirror handled by wrapper
       const down = el.tri === "down";
+      // a right-leaning asymmetric triangle so mirroring is visible
       const pts = down
-        ? `${cx},${cy + r} ${cx + r},${cy - r} ${cx - r},${cy - r}`
-        : `${cx},${cy - r} ${cx + r},${cy + r} ${cx - r},${cy + r}`;
+        ? `${cx - r},${cy + r} ${cx + r},${cy + r} ${cx + r},${cy - r}`
+        : `${cx - r},${cy - r} ${cx + r},${cy - r} ${cx + r},${cy + r}`;
       return <polygon points={pts} fill={fillColor} stroke={stroke} strokeWidth={sw} />;
     }
     case "diamond": {
@@ -38,6 +40,12 @@ function Shape({ el, cx, cy, size }: { el: Element; cx: number; cy: number; size
     default:
       return null;
   }
+  })();
+  // Horizontal mirror about the element's own centre when `mirror` is set.
+  if (el.mirror) {
+    return <g transform={`translate(${2 * cx} 0) scale(-1 1)`}>{inner}</g>;
+  }
+  return <>{inner}</>;
 }
 
 // A quarter-filled circle. `quarter` 0..3 selects which 90° wedge is filled,

@@ -32,6 +32,8 @@ export interface Element {
   direction?: Direction; // only for arrows
   quarter?: number; // 0..3 — which quarter of a pie-circle is filled (clockwise from top-right)
   tri?: "up" | "down"; // triangle orientation (for composite rows)
+  scale?: number; // 0.5..1.5 relative size multiplier (size-progression rule)
+  mirror?: boolean; // horizontal mirror flag (reflection rule)
 }
 
 // A panel is a fixed layout of positioned slots, each holding one element
@@ -1264,7 +1266,7 @@ function buildValid(
 ): AbstractQuestion {
   const spec = TIER[difficulty];
   let last: BuiltItem | null = null;
-  for (let attempt = 0; attempt < 40; attempt++) {
+  for (let attempt = 0; attempt < 120; attempt++) {
     const item = build();
     last = item;
     if (validateItem(item, spec)) return assemble(rng, id, difficulty, item);
@@ -1439,6 +1441,8 @@ type RowRule =
   | { kind: "fill"; shape: ShapeKind; cols: number; start: Fill }
   | { kind: "shapeCycle"; cycle: ShapeKind[]; cols: number }
   | { kind: "orientation"; cols: number; startUp: boolean }
+  | { kind: "size"; shape: ShapeKind; cols: number; scales: number[] }
+  | { kind: "reflect"; shape: ShapeKind; cols: number; startMirror: boolean }
   | { kind: "decoy"; shape: ShapeKind; fill: Fill; cols: number };
 
 function rowElementsAt(rule: RowRule, t: number): Element[] {
@@ -1459,6 +1463,15 @@ function rowElementsAt(rule: RowRule, t: number): Element[] {
       const up = (t % 2 === 0) === rule.startUp;
       return Array.from({ length: rule.cols }, () => ({ shape: "triangle", fill: "solid" as Fill, tri: up ? "up" : "down" }));
     }
+    case "size": {
+      const scale = cycleAt(rule.scales, t);
+      return Array.from({ length: rule.cols }, () => ({ shape: rule.shape, fill: "outline" as Fill, scale }));
+    }
+    case "reflect": {
+      // asymmetric shape (triangle pointing) that mirrors each step
+      const mir = (t % 2 === 0) === rule.startMirror;
+      return Array.from({ length: rule.cols }, () => ({ shape: rule.shape, fill: "solid" as Fill, mirror: mir, tri: "up" as const }));
+    }
     case "decoy":
       return Array.from({ length: rule.cols }, () => ({ shape: rule.shape, fill: rule.fill }));
   }
@@ -1471,6 +1484,8 @@ function rowPeriod(rule: RowRule): number {
     case "fill": return 2;
     case "shapeCycle": return rule.cycle.length;
     case "orientation": return 2;
+    case "size": return rule.scales.length;
+    case "reflect": return 2;
     case "decoy": return 1;
   }
 }
@@ -1485,10 +1500,12 @@ function frameNRow(rng: () => number, rows: number, activeRules: number): BuiltI
   // Rule factories, grouped by period so we can guarantee a long combined period.
   const makeCount3 = (): RowRule => ({ kind: "count", vals: pick(rng, [[1, 2, 3], [2, 3, 4], [1, 2, 3, 4]]), shape: pick(rng, shapesPool) });
   const makeShapeCycle3 = (): RowRule => ({ kind: "shapeCycle", cycle: makeShapeCycle(rng, 3), cols: pick(rng, [2, 3]) });
+  const makeSize3 = (): RowRule => ({ kind: "size", shape: pick(rng, shapesPool), cols: pick(rng, [2, 3]), scales: pick(rng, [[0.6, 1.0, 1.4], [1.4, 1.0, 0.6]]) });
   const makeFill2 = (): RowRule => ({ kind: "fill", shape: pick(rng, shapesPool), cols: pick(rng, [2, 3]), start: pick(rng, ["solid", "outline"] as Fill[]) });
   const makeOrient2 = (): RowRule => ({ kind: "orientation", cols: 3, startUp: rng() < 0.5 });
-  const period3Factories = [makeCount3, makeShapeCycle3];
-  const period2Factories = [makeFill2, makeOrient2];
+  const makeReflect2 = (): RowRule => ({ kind: "reflect", shape: "triangle", cols: pick(rng, [2, 3]), startMirror: rng() < 0.5 });
+  const period3Factories = [makeCount3, makeShapeCycle3, makeSize3];
+  const period2Factories = [makeFill2, makeOrient2, makeReflect2];
 
   // Build the active rule set. To GUARANTEE five distinct shown panels, one
   // active row is a "count" rule whose six values are all distinct within the
@@ -1668,8 +1685,8 @@ const TEMPLATES: Record<AbstractDifficulty, ((rng: () => number) => BuiltItem)[]
     frameCoupledCross,
   ],
   extreme: [
-    (rng) => frameNRow(rng, 5, 4), // 5 rows, 4 active, 1 decoy
-    (rng) => frameNRow(rng, 6, 4), // 6 rows, 4 active, 2 decoys
+    (rng) => frameNRow(rng, 6, 5), // 6 rows, 5 active, 1 decoy
+    (rng) => frameNRow(rng, 6, 6), // 6 rows, ALL active — maximum load
     framePieGrid,
     frameSegments,
     frameCoupledCross,
