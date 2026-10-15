@@ -218,9 +218,9 @@ export default function AbstractRunner() {
       <p className="mt-4 font-medium">Which figure completes the pattern?</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {current.sequence.map((p, i) => (
-          <AbstractPanel key={i} panel={p} size={84} />
+          <AbstractPanel key={i} panel={p} size={116} />
         ))}
-        <div className="flex h-[84px] w-[84px] items-center justify-center rounded border-2 border-dashed border-neutral-400 text-2xl text-neutral-400">
+        <div className="flex h-[116px] w-[116px] items-center justify-center rounded border-2 border-dashed border-neutral-400 text-3xl text-neutral-400">
           ?
         </div>
       </div>
@@ -242,7 +242,7 @@ export default function AbstractRunner() {
               className={`flex flex-col items-center gap-1 rounded-lg border p-2 transition ${ring}`}
             >
               <span className="text-xs font-semibold text-neutral-600">{OPTION_LETTERS[i]}</span>
-              <AbstractPanel panel={p} size={72} />
+              <AbstractPanel panel={p} size={100} />
             </button>
           );
         })}

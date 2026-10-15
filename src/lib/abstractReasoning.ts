@@ -814,39 +814,74 @@ function genExtremeComposite(rng: () => number, id: string): AbstractQuestion {
 // EXTREME template: CORNER PIES + CENTRE STACK (EPSO Q9). Four quarter-filled
 // circles sit at the corners, each rotating; two shapes stacked in the centre
 // cycle shape and fill. Rotation + stack-cycle + fill = three simultaneous rules.
+// EXTREME template: CORNER PIES + CENTRE STACK (EPSO Q9), HARD variant. The
+// four corner quarter-circles rotate at DIFFERENT speeds (two clockwise by 1,
+// two by 2 steps), the top centre shape cycles, and the bottom centre fill
+// alternates. Four interacting rules; distractors are near-misses on exactly
+// one rule so they can't be eliminated by surface features.
 function genExtremePieCross(rng: () => number, id: string): AbstractQuestion {
   const cornerStarts = [0, 1, 2, 3].map(() => Math.floor(rng() * 4));
-  const rotStep = pick(rng, [1, -1]);
+  // per-corner rotation speeds — mix of 1 and 2 steps, some reversed
+  const cornerSpeeds = [1, 2, -1, 2];
   const centreCycle = shuffleArr(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie")).slice(0, 3);
   const bottomCentre = pick(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie"));
+  const q = (c: number, i: number) => ((cornerStarts[c] + i * cornerSpeeds[c]) % 4 + 400) % 4;
 
   const panelFor = (i: number): Panel => ({
     layout: "pieCross",
     slots: [
-      // 4 corners NE, SE, SW, NW
-      { shape: "pie", fill: "solid", quarter: ((cornerStarts[0] + i * rotStep) % 4 + 4) % 4 },
-      { shape: "pie", fill: "solid", quarter: ((cornerStarts[1] + i * rotStep) % 4 + 4) % 4 },
-      { shape: "pie", fill: "solid", quarter: ((cornerStarts[2] + i * rotStep) % 4 + 4) % 4 },
-      { shape: "pie", fill: "solid", quarter: ((cornerStarts[3] + i * rotStep) % 4 + 4) % 4 },
-      // centre top: cycles shape
+      { shape: "pie", fill: "solid", quarter: q(0, i) },
+      { shape: "pie", fill: "solid", quarter: q(1, i) },
+      { shape: "pie", fill: "solid", quarter: q(2, i) },
+      { shape: "pie", fill: "solid", quarter: q(3, i) },
       { shape: centreCycle[i % 3], fill: "outline" },
-      // centre bottom: fixed shape, fill alternates
       { shape: bottomCentre, fill: i % 2 === 0 ? "solid" : "outline" },
     ],
   });
 
   const sequence = [0, 1, 2, 3, 4].map(panelFor);
   const correct = panelFor(5);
+  // Near-miss distractors: each is correct on every rule but ONE.
   const distractors: Panel[] = [];
-  { const p = clonePanel(correct); const e = p.slots[0]!; p.slots[0] = { ...e, quarter: (e.quarter! + 1) % 4 }; distractors.push(p); }
-  { const p = clonePanel(correct); p.slots[4] = { ...p.slots[4]!, shape: centreCycle[(5 + 1) % 3] }; distractors.push(p); }
-  { const p = clonePanel(correct); const e = p.slots[5]!; p.slots[5] = { ...e, fill: e.fill === "solid" ? "outline" : "solid" }; distractors.push(p); }
+  { const p = clonePanel(correct); const e = p.slots[1]!; p.slots[1] = { ...e, quarter: (e.quarter! + 1) % 4 }; distractors.push(p); } // one corner off by one
+  { const p = clonePanel(correct); p.slots[4] = { ...p.slots[4]!, shape: centreCycle[(5 + 1) % 3] }; distractors.push(p); } // centre-top one step ahead
+  { const p = clonePanel(correct); const e = p.slots[5]!; p.slots[5] = { ...e, fill: e.fill === "solid" ? "outline" : "solid" }; distractors.push(p); } // bottom fill wrong
+  { const p = clonePanel(correct); const e = p.slots[3]!; p.slots[3] = { ...e, quarter: (e.quarter! + 2) % 4 }; distractors.push(p); } // a fast corner mis-tracked
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty: "extreme", sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary:
+      "Four interacting rules: the four corner quarter-circles rotate at DIFFERENT speeds (some one step, some two, one reversed); the top centre shape cycles through three shapes; the bottom centre shape alternates fill. Every rule must be exact.",
+  };
+}
+
+// EXTREME template: OVERLAY XOR. Two shape-rows where a shape appears in the
+// answer only if it was present in an ODD number of the two source rows this
+// step (classic EPSO overlay/add-remove logic), while a counter also advances.
+function genExtremeOverlay(rng: () => number, id: string): AbstractQuestion {
+  const shapes: ShapeKind[] = shuffleArr(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie")).slice(0, 3);
+  // each step toggles presence of each shape on a different phase
+  const present = (shape: number, i: number) => ((i + shape) % 2 + 2) % 2 === 0;
+  const topStep = pick(rng, [1, -1]);
+  const topStart = topStep === 1 ? 1 : 4;
+  const panelFor = (i: number): Panel => {
+    const row1: Element[] = shapes.filter((_, k) => present(k, i)).map((shape) => ({ shape, fill: "solid" }));
+    const row2: Element[] = shapes.filter((_, k) => present(k, i + 1)).map((shape) => ({ shape, fill: "outline" }));
+    const row3: Element[] = Array.from({ length: Math.max(1, topStart + i * topStep) }, () => ({ shape: "circle", fill: "solid" as Fill } as Element));
+    return { layout: "composite3", slots: [], rows: [row1.length ? row1 : [{ shape: shapes[0], fill: "solid" }], row2.length ? row2 : [{ shape: shapes[1], fill: "outline" }], row3] };
+  };
+  const sequence = [0, 1, 2, 3, 4].map(panelFor);
+  const correct = panelFor(5);
+  const distractors: Panel[] = [];
+  { const p = clonePanel(correct); p.rows![0] = p.rows![0].map((e) => ({ ...e, fill: e.fill === "solid" ? "outline" : "solid" })); distractors.push(p); }
+  { const p = clonePanel(correct); p.rows![2] = Array.from({ length: p.rows![2].length + 1 }, () => ({ shape: "circle", fill: "solid" as Fill } as Element)); distractors.push(p); }
+  { const p = clonePanel(correct); p.rows![1] = [...p.rows![1], { shape: shapes[2], fill: "outline" }]; distractors.push(p); }
   distractors.push(panelFor(4));
   const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
   return {
     id, difficulty: "extreme", sequence, options: sh.options, answerIndex: sh.answerIndex,
     ruleSummary:
-      "Three rules at once: the four corner quarter-circles all rotate together; the top centre shape cycles through a 3-shape sequence; the bottom centre shape keeps its shape but alternates fill.",
+      "Add/remove logic: each shape appears or disappears on its own alternating phase across the top two rows, while the bottom counter changes count. Track each shape's presence AND the count.",
   };
 }
 
@@ -881,6 +916,7 @@ const TEMPLATES: Record<AbstractDifficulty, Generator[]> = {
   extreme: [
     genExtremeComposite,
     genExtremePieCross,
+    genExtremeOverlay,
     genSegments, // the 8-segment square is genuinely extreme too
     genComposite3,
   ],
