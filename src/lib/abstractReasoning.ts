@@ -886,6 +886,90 @@ function genExtremeOverlay(rng: () => number, id: string): AbstractQuestion {
 }
 
 // ----------------------------------------------------------------------------
+// COMPOUND templates — the real difficulty lever. Multiple rule FAMILIES are
+// layered onto the SAME element at once, so no single feature gives the pattern
+// away. You must track rotation AND fill AND shape (etc.) simultaneously on one
+// figure. Available at hard and extreme.
+// ----------------------------------------------------------------------------
+
+// COMPOUND 1: one arrow that (a) rotates, (b) alternates fill, and (c) its
+// shaft cycles solid/arrow? Keep to attributes we render: rotation + fill +
+// a small satellite dot that moves. Three families on one figure.
+function genCompoundArrow(rng: () => number, id: string, difficulty: AbstractDifficulty): AbstractQuestion {
+  const start = pick(rng, CW);
+  const rotStep = pick(rng, [1, -1]);
+  const fillStart: Fill = pick(rng, ["solid", "outline"] as Fill[]);
+  // a second shape in the row that cycles through shapes independently
+  const satCycle = shuffleArr(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie")).slice(0, 3);
+
+  const panelFor = (i: number): Panel => ({
+    layout: "row3",
+    slots: [
+      // left: shape that cycles AND alternates fill (two families on one element)
+      { shape: satCycle[i % 3], fill: i % 2 === 0 ? "solid" : "outline" },
+      null,
+      // right: arrow that rotates AND alternates fill
+      { shape: "arrow", fill: i % 2 === 0 ? fillStart : fillStart === "solid" ? "outline" : "solid", direction: rotateDir(start, i * rotStep) },
+    ],
+  });
+  const sequence = [0, 1, 2, 3, 4].map(panelFor);
+  const correct = panelFor(5);
+  const distractors: Panel[] = [];
+  // each near-miss breaks exactly ONE of the layered families
+  { const p = clonePanel(correct); const e = p.slots[2]!; p.slots[2] = { ...e, direction: rotateDir(e.direction!, 1) }; distractors.push(p); } // arrow rotation off
+  { const p = clonePanel(correct); const e = p.slots[2]!; p.slots[2] = { ...e, fill: e.fill === "solid" ? "outline" : "solid" }; distractors.push(p); } // arrow fill off
+  { const p = clonePanel(correct); const e = p.slots[0]!; p.slots[0] = { ...e, shape: satCycle[(5 + 1) % 3] }; distractors.push(p); } // left shape-cycle off
+  { const p = clonePanel(correct); const e = p.slots[0]!; p.slots[0] = { ...e, fill: e.fill === "solid" ? "outline" : "solid" }; distractors.push(p); } // left fill off
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty, sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary:
+      "Compound rules on the SAME figures: the left shape cycles through three shapes AND alternates fill; the right arrow rotates 90° per step AND alternates fill. Four rule-threads, two per figure — track them together.",
+  };
+}
+
+// COMPOUND 2: a single shape that simultaneously (a) ROTATES position around a
+// cross, (b) changes SHAPE on a cycle, and (c) alternates FILL. One element,
+// three transformation families — the hardest kind to read.
+function genCompoundOrbit(rng: () => number, id: string, difficulty: AbstractDifficulty): AbstractQuestion {
+  const shapeCycle = shuffleArr(rng, ALL_SHAPES.filter((s) => s !== "arrow" && s !== "pie")).slice(0, 3);
+  const posStep = pick(rng, [1, -1]);
+  const fillStart: Fill = pick(rng, ["solid", "outline"] as Fill[]);
+  // the single travelling element occupies one of the 4 cross arms (N,E,S,W)
+  const panelFor = (i: number): Panel => {
+    const pos = ((i * posStep) % 4 + 4) % 4; // which arm
+    const el: Element = {
+      shape: shapeCycle[i % 3],
+      fill: i % 2 === 0 ? fillStart : fillStart === "solid" ? "outline" : "solid",
+    };
+    const slots: (Element | null)[] = [null, null, null, null, null];
+    slots[pos] = el;
+    return { layout: "cross", slots };
+  };
+  const sequence = [0, 1, 2, 3, 4].map(panelFor);
+  const correct = panelFor(5);
+  const correctPos = ((5 * posStep) % 4 + 4) % 4;
+  const correctEl = correct.slots[correctPos]!;
+  const mk = (pos: number, el: Element): Panel => {
+    const slots: (Element | null)[] = [null, null, null, null, null];
+    slots[pos] = el;
+    return { layout: "cross", slots };
+  };
+  const distractors: Panel[] = [
+    mk(((correctPos + 1) % 4), correctEl), // position wrong
+    mk(correctPos, { ...correctEl, shape: shapeCycle[(5 + 1) % 3] }), // shape-cycle wrong
+    mk(correctPos, { ...correctEl, fill: correctEl.fill === "solid" ? "outline" : "solid" }), // fill wrong
+    mk(((correctPos + 3) % 4), { ...correctEl, shape: shapeCycle[(5 + 2) % 3] }), // two families wrong
+  ];
+  const sh = shuffleWithAnswer(rng, [correct, ...distractors], 0);
+  return {
+    id, difficulty, sequence, options: sh.options, answerIndex: sh.answerIndex,
+    ruleSummary:
+      "One figure, three transformations at once: it ORBITS one position around the cross each step, its SHAPE cycles through three forms, and its FILL alternates. All three must be right.",
+  };
+}
+
+// ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
 type Generator = (rng: () => number, id: string) => AbstractQuestion;
@@ -912,6 +996,8 @@ const TEMPLATES: Record<AbstractDifficulty, Generator[]> = {
     (rng, id) => genReflection(rng, id, "hard"),
     genSegments,
     genComposite3,
+    (rng, id) => genCompoundArrow(rng, id, "hard"),
+    (rng, id) => genCompoundOrbit(rng, id, "hard"),
   ],
   extreme: [
     genExtremeComposite,
@@ -919,6 +1005,8 @@ const TEMPLATES: Record<AbstractDifficulty, Generator[]> = {
     genExtremeOverlay,
     genSegments, // the 8-segment square is genuinely extreme too
     genComposite3,
+    (rng, id) => genCompoundArrow(rng, id, "extreme"),
+    (rng, id) => genCompoundOrbit(rng, id, "extreme"),
   ],
 };
 
