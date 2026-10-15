@@ -131,6 +131,67 @@ export function validateQuestion(raw: unknown, topic: Topic, difficulty: Difficu
   return base;
 }
 
+// Deterministic-free shuffle of a question's options so the correct answer is
+// NOT biased toward a fixed position. LLMs strongly favour putting the correct
+// option first (A), so without this the answer is almost always A. We relabel
+// choices after shuffling and remap `answer`.
+//
+// Exceptions that must NOT be reordered:
+//  - verbal T/F: options are fixed (True / False / Cannot say / -)
+//  - any question with an "E" that is a terminal "none/cannot" option: E stays
+//    last; A-D (or A-D minus) are shuffled among themselves.
+const FIXED_ORDER_SNIPPETS = [
+  "true", "false", "cannot say", "verdadeiro", "falso", "não é possível",
+];
+const TERMINAL_E_SNIPPETS = [
+  "none of the above", "cannot be determined", "nenhuma das anteriores", "impossível responder",
+];
+
+function shuffleAnswer(q: Question): Question {
+  // Skip verbal T/F (fixed semantic order).
+  const aLabel = (q.choices.A ?? "").toLowerCase();
+  const bLabel = (q.choices.B ?? "").toLowerCase();
+  if (FIXED_ORDER_SNIPPETS.some((s) => aLabel.includes(s) || bLabel.includes(s))) {
+    return q;
+  }
+
+  const present: ChoiceKey[] = (["A", "B", "C", "D", "E"] as ChoiceKey[]).filter((k) => {
+    const l = q.choices[k];
+    return typeof l === "string" && l.trim() && l !== "-" && l !== "(unused)";
+  });
+  if (present.length < 2) return q;
+
+  // Keep a terminal "E" (none/cannot) pinned last; shuffle the rest.
+  const lastKey = present[present.length - 1];
+  const lastLabel = (q.choices[lastKey] ?? "").toLowerCase();
+  const pinLast = TERMINAL_E_SNIPPETS.some((s) => lastLabel.includes(s));
+  const shufflable = pinLast ? present.slice(0, -1) : present.slice();
+
+  // Collect (label, wasCorrect) for the shufflable set.
+  const items = shufflable.map((k) => ({ label: q.choices[k]!, correct: k === q.answer }));
+  // Fisher-Yates.
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+
+  // Rebuild choices in order: shuffled items, then the pinned E (if any).
+  const orderKeys = present; // same slots A,B,C,(D),(E)
+  const newChoices: Record<string, string> = {};
+  let newAnswer: ChoiceKey = q.answer;
+  items.forEach((it, idx) => {
+    const slot = orderKeys[idx];
+    newChoices[slot] = it.label;
+    if (it.correct) newAnswer = slot;
+  });
+  if (pinLast) {
+    newChoices[lastKey] = q.choices[lastKey]!;
+    if (lastKey === q.answer) newAnswer = lastKey;
+  }
+
+  return { ...q, choices: { ...q.choices, ...newChoices } as typeof q.choices, answer: newAnswer };
+}
+
 // Parse an LLM JSON payload expected to be { questions: [...] }.
 export function parseQuestions(rawJson: string, topic: Topic, difficulty: Difficulty = "medium", language: QuestionLanguage = "en"): Question[] {
   let parsed: unknown;
@@ -143,7 +204,8 @@ export function parseQuestions(rawJson: string, topic: Topic, difficulty: Diffic
   const arr = Array.isArray(container.questions) ? container.questions : [];
   return arr
     .map((item) => validateQuestion(item, topic, difficulty, language))
-    .filter((q): q is Question => q !== null);
+    .filter((q): q is Question => q !== null)
+    .map(shuffleAnswer);
 }
 
 // Per-topic focus hints steer the model toward what the real exam tests.
