@@ -56,6 +56,96 @@ function parseLanguage(raw: unknown, requested: QuestionLanguage): QuestionLangu
   return requested;
 }
 
+// --- Numerical answer-key consistency gate -------------------------------
+// The LLM sometimes declares an answer letter that does NOT match the value
+// its own workedSolution computes (it rounds an intermediate step, or picks
+// the wrong option). That silently mis-trains the user. This gate extracts the
+// final numeric value from the worked solution, matches it against the numeric
+// value of each option, and (a) remaps the answer to the matching option, or
+// (b) rejects the question when nothing matches within tolerance.
+
+// Parse candidate numeric interpretations from a string. Returns ALL plausible
+// values because EU vs Anglo separators are ambiguous (e.g. "19.330" could be
+// 19.33 or 19330; "3,466" could be 3.466 or 3466). Matching then succeeds if
+// ANY interpretation of the option matches ANY interpretation of the target —
+// this is deliberately lenient so we don't wrongly reject a correct item.
+// Returns [] if no number present (e.g. "Cannot be determined").
+function parseNumericCandidates(s: string): number[] {
+  if (typeof s !== "string") return [];
+  const cleaned = s.replace(/[€$£%]/g, " ").trim();
+  const m = cleaned.match(/-?\d[\d.,\s]*\d|-?\d/);
+  if (!m) return [];
+  const tok = m[0].replace(/\s/g, "");
+  const out = new Set<number>();
+  const push = (v: number) => { if (Number.isFinite(v)) out.add(v); };
+
+  const lastDot = tok.lastIndexOf(".");
+  const lastComma = tok.lastIndexOf(",");
+
+  if (lastDot !== -1 && lastComma !== -1) {
+    // Both present: the LAST separator is the decimal point (unambiguous).
+    if (lastComma > lastDot) push(Number(tok.replace(/\./g, "").replace(",", ".")));
+    else push(Number(tok.replace(/,/g, "")));
+  } else if (lastComma !== -1) {
+    // Only commas: ambiguous -> try comma-as-decimal AND comma-as-thousands.
+    push(Number(tok.replace(/,/g, ""))); // thousands
+    if ((tok.match(/,/g) || []).length === 1) push(Number(tok.replace(",", "."))); // decimal
+  } else if (lastDot !== -1) {
+    // Only dots: ambiguous -> try dot-as-decimal AND dot-as-thousands.
+    push(Number(tok)); // decimal (JS default)
+    if ((tok.match(/\./g) || []).length === 1) push(Number(tok.replace(/\./g, ""))); // thousands
+  } else {
+    push(Number(tok));
+  }
+  return [...out];
+}
+
+// The final numeric result of a worked solution is (almost always) the LAST
+// number that appears in it.
+function finalCandidatesFromWorkedSolution(ws: string): number[] {
+  if (typeof ws !== "string") return [];
+  const matches = ws.match(/-?\d[\d.,\s]*\d|-?\d/g);
+  if (!matches || matches.length === 0) return [];
+  return parseNumericCandidates(matches[matches.length - 1]);
+}
+
+// Two numbers "match" if within a small relative tolerance (handles rounding).
+function numbersClose(a: number, b: number): boolean {
+  if (a === b) return true;
+  const scale = Math.max(Math.abs(a), Math.abs(b), 1e-9);
+  return Math.abs(a - b) / scale <= 0.01; // 1% tolerance
+}
+
+// True if any interpretation of the option matches any interpretation of target.
+function candidatesMatch(optVals: number[], targetVals: number[]): boolean {
+  return optVals.some((o) => targetVals.some((t) => numbersClose(o, t)));
+}
+
+// Returns a corrected ChoiceKey, or null if the question should be rejected.
+function reconcileNumericalAnswer(
+  choices: Choices,
+  declared: ChoiceKey,
+  workedSolution: string,
+): ChoiceKey | null {
+  const target = finalCandidatesFromWorkedSolution(workedSolution);
+  if (target.length === 0) return declared; // can't extract -> trust declared
+
+  const keys = (["A", "B", "C", "D", "E"] as ChoiceKey[]).filter(
+    (k) => typeof choices[k] === "string" && (choices[k] as string).trim(),
+  );
+
+  const matches = keys.filter((k) => candidatesMatch(parseNumericCandidates(choices[k] as string), target));
+
+  if (matches.length === 1) return matches[0];
+  if (matches.length === 0) {
+    // Result isn't among the options -> inconsistent. Keep only if the declared
+    // option has no parseable number (e.g. "Cannot be determined"); else reject.
+    return parseNumericCandidates((choices[declared] as string) ?? "").length === 0 ? declared : null;
+  }
+  // Ambiguous (several options share a value) -> prefer the declared one.
+  return matches.includes(declared) ? declared : matches[0];
+}
+
 export function validateQuestion(raw: unknown, topic: Topic, difficulty: Difficulty = "medium", language: QuestionLanguage = "en"): Question | null {
   if (typeof raw !== "object" || raw === null) return null;
   const q = raw as Record<string, unknown>;
@@ -120,9 +210,22 @@ export function validateQuestion(raw: unknown, topic: Topic, difficulty: Difficu
         .map((s) => s.trim());
       if (clean.length > 0) steps = clean;
     }
+
+    // Answer-key consistency gate: make the labelled answer agree with the
+    // value the worked solution actually computes (fixes LLM rounding / wrong
+    // letter). Returns null when the item is internally inconsistent -> drop it
+    // so the caller falls back to the seeded bank rather than mis-train.
+    const reconciledAnswer = reconcileNumericalAnswer(
+      builtChoices,
+      base.answer,
+      q.workedSolution.trim(),
+    );
+    if (reconciledAnswer === null) return null;
+
     return {
       ...base,
       topic: "numerical",
+      answer: reconciledAnswer,
       workedSolution: q.workedSolution.trim(),
       ...(steps ? { steps } : {}),
     };
