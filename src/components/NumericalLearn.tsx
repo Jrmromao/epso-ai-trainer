@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { type ChoiceKey, type Question, isNumerical } from "@/lib/types";
+import { classifyNumerical, NUMERICAL_TYPE_INFO } from "@/lib/numericalType";
 import Calculator from "@/components/Calculator";
 import QuestionTableView from "@/components/QuestionTableView";
 
@@ -32,6 +33,7 @@ export default function NumericalLearn({ questions }: { questions: Question[] })
 
   const current = questions[index];
   const steps = useMemo(() => (current ? deriveSteps(current) : []), [current]);
+  const types = useMemo(() => (current ? classifyNumerical(current) : []), [current]);
 
   if (questions.length === 0) {
     return <p className="mt-6 text-neutral-600">No numerical questions available.</p>;
@@ -62,6 +64,25 @@ export default function NumericalLearn({ questions }: { questions: Question[] })
       </div>
 
       <p className="mt-3 whitespace-pre-line font-medium">{current.stem}</p>
+
+      {/* Operation-type tags — the core skill is recognising the pattern. */}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {types.length > 0 ? (
+          types.map((t) => (
+            <span
+              key={t}
+              className="rounded-full border border-sky-300 bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-800"
+              title={NUMERICAL_TYPE_INFO[t].blurb}
+            >
+              {NUMERICAL_TYPE_INFO[t].label}
+            </span>
+          ))
+        ) : (
+          <span className="rounded-full border border-neutral-300 bg-neutral-50 px-2.5 py-0.5 text-xs font-medium text-neutral-600">
+            General calculation
+          </span>
+        )}
+      </div>
 
       {current.table && <QuestionTableView table={current.table} />}
 
@@ -111,6 +132,27 @@ export default function NumericalLearn({ questions }: { questions: Question[] })
         >
           {isCorrect ? "Correct" : `Not quite — answer is ${current.answer}`}
         </p>
+      )}
+
+      {/* After answering: spell out the operation type(s), method and the
+          classic trap — reinforces pattern recognition. */}
+      {chosen && types.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {types.map((t) => {
+            const info = NUMERICAL_TYPE_INFO[t];
+            return (
+              <div key={t} className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">
+                <p className="font-semibold text-sky-900">{info.label}</p>
+                <p className="mt-1 text-neutral-700">
+                  <span className="font-medium">Method:</span> {info.blurb}
+                </p>
+                <p className="mt-1 text-amber-900">
+                  <span className="font-medium">⚠ Trap:</span> {info.trap}
+                </p>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* Step-by-step reveal. Works before OR after answering — get stuck, reveal
