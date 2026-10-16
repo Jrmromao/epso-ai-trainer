@@ -59,7 +59,7 @@ export default function StudyMode({
 function Concepts({ content }: { content: StudyContent }) {
   return (
     <div className="mt-4">
-      <p className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700">
+      <p className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-base leading-relaxed text-neutral-700">
         {content.summary}
       </p>
       <div className="mt-4 space-y-4">
@@ -78,7 +78,7 @@ function Concepts({ content }: { content: StudyContent }) {
                   </span>
                 )}
               </h3>
-              <ul className="mt-2 space-y-2 text-sm text-neutral-700">
+              <ul className="mt-2 space-y-2 text-base leading-relaxed text-neutral-700">
                 {sec.points.map((p, j) => (
                   <li key={j} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0">
                     <div className="flex items-start gap-2">
@@ -93,7 +93,7 @@ function Concepts({ content }: { content: StudyContent }) {
           );
         })}
       </div>
-      <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+      <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
         <span className="font-semibold">Verify exact figures against the primary source:</span>{" "}
         {content.verifyAgainst} The exam tests precise detail (article numbers,
         thresholds, dates) — confirm these against the real text.
@@ -153,18 +153,18 @@ function ExplainButton({ topic, heading, point }: { topic: Topic; heading: strin
       <button
         onClick={explain}
         disabled={loading}
-        className="text-xs font-medium text-blue-700 hover:underline disabled:opacity-50"
+        className="text-sm font-medium text-blue-700 hover:underline disabled:opacity-50"
       >
         {loading ? "Thinking…" : text ? (open ? "Hide explanation" : "Show explanation") : "Explain further ↓"}
       </button>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
       {open && text && (
-        <div className="mt-1 rounded border border-blue-200 bg-blue-50 p-3 text-xs leading-relaxed text-neutral-800">
+        <div className="mt-1 rounded border border-blue-200 bg-blue-50 p-3 text-sm leading-relaxed text-neutral-800">
           <div className="mb-1 flex items-center gap-2">
             <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
               AI
             </span>
-            <span className="text-[11px] text-blue-900">AI-generated elaboration — verify specifics against the primary source.</span>
+            <span className="text-xs text-blue-900">AI-generated elaboration — verify specifics against the primary source.</span>
           </div>
           <p className="whitespace-pre-line">{text}</p>
         </div>
@@ -248,8 +248,8 @@ function Learn({ questions, topicLabel }: { questions: Question[]; topicLabel: s
         });
         return (
           <div key={q.id} className="rounded-lg border border-neutral-200 bg-white p-4">
-            <p className="whitespace-pre-line text-sm font-medium">{i + 1}. {q.stem}</p>
-            <ul className="mt-2 space-y-1 text-sm">
+            <p className="whitespace-pre-line text-base font-medium">{i + 1}. {q.stem}</p>
+            <ul className="mt-2 space-y-1 text-base">
               {keys.map((k) => {
                 const isAnswer = k === q.answer;
                 return (
@@ -263,11 +263,11 @@ function Learn({ questions, topicLabel }: { questions: Question[]; topicLabel: s
                 );
               })}
             </ul>
-            <p className="mt-2 text-sm text-neutral-700">
+            <p className="mt-2 text-base leading-relaxed text-neutral-700">
               <span className="font-semibold">Why:</span> {q.explanation}
             </p>
             {isNumerical(q) && (
-              <p className="mt-1 rounded bg-neutral-50 p-2 text-sm text-neutral-800">
+              <p className="mt-1 rounded bg-neutral-50 p-2 text-base leading-relaxed text-neutral-800">
                 <span className="font-semibold">Worked solution:</span> {q.workedSolution}
               </p>
             )}
