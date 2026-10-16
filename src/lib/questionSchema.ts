@@ -38,6 +38,32 @@ function parseTable(raw: unknown): QuestionTable | undefined {
   return { headers, rows, ...(caption ? { caption } : {}) };
 }
 
+// Parse optional per-option feedback (learn mode). Only keeps notes for option
+// letters that actually exist, with a valid verdict and a non-empty note.
+// Returns undefined if nothing usable (so the field is omitted entirely).
+function parseOptionNotes(
+  raw: unknown,
+  choices: Choices,
+): Partial<Record<ChoiceKey, { verdict: "true" | "false"; note: string }>> | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const src = raw as Record<string, unknown>;
+  const out: Partial<Record<ChoiceKey, { verdict: "true" | "false"; note: string }>> = {};
+  let any = false;
+  for (const k of ["A", "B", "C", "D", "E"] as ChoiceKey[]) {
+    const label = choices[k];
+    if (typeof label !== "string" || !label.trim() || label === "-" || label === "(unused)") continue;
+    const entry = src[k];
+    if (typeof entry !== "object" || entry === null) continue;
+    const e = entry as Record<string, unknown>;
+    const verdict = e.verdict === "true" ? "true" : e.verdict === "false" ? "false" : null;
+    const note = typeof e.note === "string" ? e.note.trim() : "";
+    if (!verdict || !note) continue;
+    out[k] = { verdict, note };
+    any = true;
+  }
+  return any ? out : undefined;
+}
+
 const VALID_DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
 const VALID_LANGUAGES: QuestionLanguage[] = ["en", "pt-PT"];
 
@@ -235,6 +261,7 @@ export function validateQuestion(raw: unknown, topic: Topic, difficulty: Difficu
     choices: builtChoices,
     answer: q.answer,
     explanation: q.explanation.trim(),
+    ...(parseOptionNotes(q.optionNotes, builtChoices) ? { optionNotes: parseOptionNotes(q.optionNotes, builtChoices)! } : {}),
   };
 
   // Numerical questions MUST carry a worked solution (spec AC4 guardrail).
@@ -352,6 +379,16 @@ function shuffleAnswer(q: Question): Question {
     answer: newAnswer,
     explanation: remapLetters(q.explanation, remap),
   };
+  // Per-option notes are keyed by letter and tied to option CONTENT, so remap
+  // their keys to follow the shuffled positions.
+  if (q.optionNotes) {
+    const movedNotes: Partial<Record<ChoiceKey, { verdict: "true" | "false"; note: string }>> = {};
+    for (const [from, note] of Object.entries(q.optionNotes) as [ChoiceKey, { verdict: "true" | "false"; note: string }][]) {
+      const to = remap[from] ?? from;
+      movedNotes[to] = { ...note, note: remapLetters(note.note, remap) };
+    }
+    next.optionNotes = movedNotes;
+  }
   if (isNumerical(next) && isNumerical(q)) {
     next.workedSolution = remapLetters(q.workedSolution, remap);
     if (q.steps) next.steps = q.steps.map((s) => remapLetters(s, remap));
@@ -629,11 +666,36 @@ function buildReadingComprehensionPrompt(count: number, difficulty: Difficulty =
     "support the correct answer and explain why it is the faithful paraphrase; " +
     "(b) for EACH distractor, name its trap type in CAPITALS and quote the exact " +
     "passage wording it distorts, showing the ONE word/degree that makes it wrong.\n\n" +
+    "QUESTION-TYPE VARIETY: most items ask \"which statement is correct?\", but " +
+    "roughly ONE IN FOUR must instead be an AUTHOR'S-TONE / ATTITUDE question — " +
+    "ask " +
+    (language === "pt-PT"
+      ? "\"Qual é o tom predominante adotado nesta passagem?\" "
+      : "\"Which is the predominant tone of this passage?\" ") +
+    "with four options describing the tone. For tone items: the passage must " +
+    "carry evaluative/hedging language revealing a MEASURED stance (e.g. " +
+    "'promising but narrow', 'necessary yet costly'). The correct option names " +
+    "that measured stance (e.g. 'cautiously favourable ... without minimising " +
+    "the drawbacks'). The distractors must be: (i) TOO STRONG (e.g. 'vehemently " +
+    "warning', 'alarmed') — overstates the intensity; (ii) WRONG POLARITY — " +
+    "claims the opposite lean (e.g. 'more enthusiastic than attentive to limits'); " +
+    "(iii) TOO WEAK / FALSE-NEUTRAL (e.g. 'a neutral, purely factual account') — " +
+    "this must be a TRAP, because the passage is NOT neutral; it has a perceptible " +
+    "evaluative lean. The false-neutral option is the key distractor and must " +
+    "appear in every tone item.\n\n" +
+    "PER-OPTION NOTES (required): also output \"optionNotes\", an object keyed by " +
+    "option letter A-D. For each option give {\"verdict\":\"true\"|\"false\", " +
+    "\"note\":string}. Exactly one verdict is \"true\" (the correct answer); the " +
+    "rest \"false\". Each note is ONE sentence, in the question's language, that " +
+    "quotes or paraphrases the passage to justify the verdict and (for false " +
+    "options) names why it fails — too strong, wrong polarity, too weak/neutral, " +
+    "scope swap, etc. These power a per-option breakdown in learn mode.\n\n" +
     registerNote + "\n\n" +
     'Each question object MUST include a "difficulty" field set to "' + difficulty + '" and a "language" field set to "' + language + '".\n\n' +
     "Output ONLY a JSON object of the form " +
     '{"questions":[{"stem":string,"choices":{"A":string,"B":string,"C":string,' +
-    '"D":string},"answer":"A"|"B"|"C"|"D","difficulty":"easy"|"medium"|"hard","language":string,"explanation":string}]}. ' +
+    '"D":string},"answer":"A"|"B"|"C"|"D","difficulty":"easy"|"medium"|"hard","language":string,"explanation":string,' +
+    '"optionNotes":{"A":{"verdict":"true"|"false","note":string},"B":{...},"C":{...},"D":{...}}}]}. ' +
     "The stem MUST contain the passage AND the question line. No prose outside the JSON." +
     difficultyNote +
     ANTI_TELL_RULES +

@@ -298,6 +298,23 @@ export default function MockRunner({
             {isCorrect ? "Correct" : `Incorrect — answer is ${current.answer}`}
           </p>
           <p className="mt-2 text-sm text-neutral-700">{current.explanation}</p>
+          {current.optionNotes && (
+            <ul className="mt-2 space-y-1 text-sm">
+              {(["A", "B", "C", "D", "E"] as const).map((k) => {
+                const n = current.optionNotes?.[k];
+                if (!n) return null;
+                const isTrue = n.verdict === "true";
+                return (
+                  <li key={k} className="text-neutral-800">
+                    <span className={`font-semibold ${isTrue ? "text-green-700" : "text-red-700"}`}>
+                      {k} — {isTrue ? "TRUE" : "FALSE"}
+                    </span>{" "}
+                    <span className="text-neutral-700">{n.note}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           {isNumerical(current) && (
             <p className="mt-2 rounded bg-white p-2 text-sm text-neutral-800">
               <span className="font-semibold">Worked solution:</span>{" "}

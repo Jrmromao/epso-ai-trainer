@@ -79,6 +79,10 @@ export interface BaseQuestion {
   choices: Choices;
   answer: ChoiceKey;
   explanation: string; // why the answer is correct (and pitfalls)
+  // Optional per-option feedback for learn mode: for each option letter, whether
+  // it is TRUE (the correct answer) or FALSE, and a one-line reason that quotes/
+  // paraphrases the passage. Used mainly by verbal reasoning.
+  optionNotes?: Partial<Record<ChoiceKey, { verdict: "true" | "false"; note: string }>>;
 }
 
 // Numerical questions MUST carry a worked solution — this is the answer-key

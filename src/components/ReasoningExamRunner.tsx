@@ -326,7 +326,29 @@ export default function ReasoningExamRunner() {
           </span>
           {section !== "abstract" && (() => {
             const q = (section === "verbal" ? verbal : numerical)[qIdx];
-            return q?.explanation ? <p className="mt-1 text-neutral-700">{q.explanation}</p> : null;
+            if (!q) return null;
+            return (
+              <>
+                {q.explanation ? <p className="mt-1 text-neutral-700">{q.explanation}</p> : null}
+                {q.optionNotes && (
+                  <ul className="mt-2 space-y-1">
+                    {(["A", "B", "C", "D", "E"] as const).map((k) => {
+                      const n = q.optionNotes?.[k];
+                      if (!n) return null;
+                      const isTrue = n.verdict === "true";
+                      return (
+                        <li key={k} className="text-neutral-800">
+                          <span className={`font-semibold ${isTrue ? "text-green-700" : "text-red-700"}`}>
+                            {k} — {isTrue ? "TRUE" : "FALSE"}
+                          </span>{" "}
+                          <span className="text-neutral-700">{n.note}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </>
+            );
           })()}
           {section === "abstract" && abstract[qIdx]?.ruleSummary && (
             <p className="mt-1 text-neutral-700">{abstract[qIdx].ruleSummary}</p>
