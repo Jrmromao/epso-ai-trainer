@@ -72,12 +72,19 @@ function parseLanguage(raw: unknown, requested: QuestionLanguage): QuestionLangu
 // Returns [] if no number present (e.g. "Cannot be determined").
 function parseNumericCandidates(s: string): number[] {
   if (typeof s !== "string") return [];
-  const cleaned = s.replace(/[€$£%]/g, " ").trim();
-  const m = cleaned.match(/-?\d[\d.,\s]*\d|-?\d/);
+  // Normalise Unicode minus (U+2212) and other dash variants to ASCII '-' so
+  // signs are preserved (critical for distinguishing +1,6 from −1,6).
+  const cleaned = s
+    .replace(/[\u2212\u2013\u2014]/g, "-")
+    .replace(/[€$£%]/g, " ")
+    .trim();
+  const m = cleaned.match(/[-+]?\d[\d.,\s]*\d|[-+]?\d/);
   if (!m) return [];
-  const tok = m[0].replace(/\s/g, "");
+  const raw = m[0].replace(/\s/g, "");
+  const sign = raw.startsWith("-") ? -1 : 1;
+  const tok = raw.replace(/^[-+]/, "");
   const out = new Set<number>();
-  const push = (v: number) => { if (Number.isFinite(v)) out.add(v); };
+  const push = (v: number) => { if (Number.isFinite(v)) out.add(sign * v); };
 
   const lastDot = tok.lastIndexOf(".");
   const lastComma = tok.lastIndexOf(",");
@@ -104,7 +111,8 @@ function parseNumericCandidates(s: string): number[] {
 // number that appears in it.
 function finalCandidatesFromWorkedSolution(ws: string): number[] {
   if (typeof ws !== "string") return [];
-  const matches = ws.match(/-?\d[\d.,\s]*\d|-?\d/g);
+  const norm = ws.replace(/[\u2212\u2013\u2014]/g, "-");
+  const matches = norm.match(/[-+]?\d[\d.,\s]*\d|[-+]?\d/g);
   if (!matches || matches.length === 0) return [];
   return parseNumericCandidates(matches[matches.length - 1]);
 }
@@ -144,6 +152,39 @@ function reconcileNumericalAnswer(
   }
   // Ambiguous (several options share a value) -> prefer the declared one.
   return matches.includes(declared) ? declared : matches[0];
+}
+
+// Backstop for the prompt's SEPARATION RULE: reject a numerical item whose
+// CORRECT option sits too close to another numeric option, where "too close"
+// makes the choice a rounding coin-flip (e.g. −1,6% vs −1,7%). We compare
+// signed values, so a legitimate sign-flipped distractor (−1,6 vs +1,6) is NOT
+// treated as too close. Returns true when the item is ambiguous -> drop it.
+function hasAmbiguousNumericOptions(choices: Choices, correct: ChoiceKey): boolean {
+  const correctVals = parseNumericCandidates((choices[correct] as string) ?? "");
+  if (correctVals.length === 0) return false; // non-numeric correct (e.g. "Cannot be determined")
+
+  for (const k of ["A", "B", "C", "D", "E"] as ChoiceKey[]) {
+    if (k === correct) continue;
+    const label = choices[k];
+    if (typeof label !== "string" || !label.trim()) continue;
+    const vals = parseNumericCandidates(label);
+    if (vals.length === 0) continue;
+
+    // Compare the CLOSEST interpretation pair (parser returns both decimal and
+    // thousands readings for ambiguous separators; use the nearest to avoid a
+    // false negative from picking the wrong interpretation).
+    for (const cv of correctVals) {
+      for (const v of vals) {
+        if (v === cv) continue; // exact duplicate handled elsewhere
+        const diff = Math.abs(v - cv);
+        const scale = Math.max(Math.abs(cv), Math.abs(v), 1e-9);
+        // Too close if within 0.3 absolute AND within 8% relative — a near-miss
+        // of the same calculation rather than a structurally different answer.
+        if (diff <= 0.3 && diff / scale <= 0.08) return true;
+      }
+    }
+  }
+  return false;
 }
 
 export function validateQuestion(raw: unknown, topic: Topic, difficulty: Difficulty = "medium", language: QuestionLanguage = "en"): Question | null {
@@ -221,6 +262,10 @@ export function validateQuestion(raw: unknown, topic: Topic, difficulty: Difficu
       q.workedSolution.trim(),
     );
     if (reconciledAnswer === null) return null;
+
+    // SEPARATION backstop: drop items where the correct option is a rounding
+    // coin-flip against another option (ambiguous — not a fair test item).
+    if (hasAmbiguousNumericOptions(builtChoices, reconciledAnswer)) return null;
 
     return {
       ...base,
@@ -631,8 +676,15 @@ function buildNumericalPrompt(count: number, difficulty: Difficulty = "medium", 
     "- INVERTED RATIO: the correct ratio flipped (b:a instead of a:b).\n" +
     "- UNIT ERROR: an answer off by a factor of 10/100/1000 from ignoring a " +
     "'thousands'/'millions' column header.\n" +
-    "- EARLY ROUNDING: an answer that rounded an intermediate step and is close " +
-    "but not equal to the correct value.\n" +
+    "SEPARATION RULE (critical — avoids ambiguous items): every option must be " +
+    "clearly distinguishable from the correct answer and from every other option. " +
+    "Do NOT create a distractor that differs from the correct answer only by a " +
+    "rounding choice (e.g. 10,6% vs 10,63%) or that rounds to within 0,3 " +
+    "percentage points / 1% relative of the correct value. Each distractor must " +
+    "come from a DIFFERENT structural error that yields a numerically DISTINCT " +
+    "result — not a near-miss of the same calculation. If a percentage-points " +
+    "distractor and the correct percentage-change answer would round to values " +
+    "closer than ~0,5 apart, pick different base figures so they separate cleanly.\n" +
     "In the \"explanation\", name which trap each wrong option corresponds to. " +
     "The correct answer must come from using the ORIGINAL value as the baseline, " +
     "keeping full precision until the final step, and respecting the stated units.";

@@ -82,7 +82,19 @@ const DETECTORS: { type: NumericalType; test: (text: string, q: Question) => boo
   },
   {
     type: "unit-trap",
-    test: (t) => /thousand|million|billion|mil milh|milhõ|milhar|\bGWh\b|\bkt\b|scaled|in '000|\(000s?\)/i.test(t),
+    // Only a unit trap when a scale word (thousands/millions) appears AND the
+    // question targets an ABSOLUTE quantity. If the stem asks about a rate /
+    // percentage / coverage ratio (a dimensionless derived value), the currency
+    // scale in the caption is irrelevant — don't false-positive on it.
+    test: (t, q) => {
+      const hasScaleWord = /thousand|million|billion|mil milh|milhõ|milhar|\bGWh\b|\bkt\b|scaled|in '000|\(000s?\)/i.test(t);
+      if (!hasScaleWord) return false;
+      const stem = (q.stem ?? "").toLowerCase();
+      const asksRate = /taxa|percentagem|percentual|rate|ratio|rácio|cobertura|coverage|share|proporção|proportion|índice|index|\bper\s*cent|%/i.test(stem);
+      // If the question is explicitly about a rate/percentage/index, the scale
+      // word is almost certainly a decoy caption unit, not a trap.
+      return !asksRate;
+    },
   },
   {
     type: "percentage-change",
