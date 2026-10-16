@@ -7,6 +7,7 @@ import {
   type QuestionTable,
   type Topic,
   TOPIC_LABELS,
+  isNumerical,
 } from "@/lib/types";
 
 // Runtime validation for LLM-generated questions. The LLM is untrusted output:
@@ -315,8 +316,10 @@ function shuffleAnswer(q: Question): Question {
   const pinLast = TERMINAL_E_SNIPPETS.some((s) => lastLabel.includes(s));
   const shufflable = pinLast ? present.slice(0, -1) : present.slice();
 
-  // Collect (label, wasCorrect) for the shufflable set.
-  const items = shufflable.map((k) => ({ label: q.choices[k]!, correct: k === q.answer }));
+  // Collect (originalKey, label, wasCorrect) for the shufflable set so we can
+  // build an old->new letter remap to also fix letter references in the
+  // explanation/worked solution.
+  const items = shufflable.map((k) => ({ from: k, label: q.choices[k]!, correct: k === q.answer }));
   // Fisher-Yates.
   for (let i = items.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -327,17 +330,60 @@ function shuffleAnswer(q: Question): Question {
   const orderKeys = present; // same slots A,B,C,(D),(E)
   const newChoices: Record<string, string> = {};
   let newAnswer: ChoiceKey = q.answer;
+  const remap: Partial<Record<ChoiceKey, ChoiceKey>> = {};
   items.forEach((it, idx) => {
     const slot = orderKeys[idx];
     newChoices[slot] = it.label;
+    remap[it.from] = slot; // old letter -> new letter
     if (it.correct) newAnswer = slot;
   });
   if (pinLast) {
     newChoices[lastKey] = q.choices[lastKey]!;
+    remap[lastKey] = lastKey; // unchanged
     if (lastKey === q.answer) newAnswer = lastKey;
   }
 
-  return { ...q, choices: { ...q.choices, ...newChoices } as typeof q.choices, answer: newAnswer };
+  // Rewrite letter references in the explanation (and worked solution/steps)
+  // using the remap, so "option B"/"a opção B"/"(C)" etc. point to the new
+  // positions. Without this the shuffle silently scrambles the rationale.
+  const next = {
+    ...q,
+    choices: { ...q.choices, ...newChoices } as typeof q.choices,
+    answer: newAnswer,
+    explanation: remapLetters(q.explanation, remap),
+  };
+  if (isNumerical(next) && isNumerical(q)) {
+    next.workedSolution = remapLetters(q.workedSolution, remap);
+    if (q.steps) next.steps = q.steps.map((s) => remapLetters(s, remap));
+  }
+  return next;
+}
+
+// Rewrite standalone option-letter references (A-E) in prose according to the
+// remap. Applied simultaneously (via a single pass with a placeholder) so a
+// chain like A->C, C->A doesn't double-apply. Only matches letters used as
+// option references: a capital A-E that is a standalone token or immediately
+// followed by ')' / '.' / ':' / ',' / whitespace — NOT letters inside words.
+function remapLetters(text: string, remap: Partial<Record<ChoiceKey, ChoiceKey>>): string {
+  if (typeof text !== "string" || !text) return text;
+  // Match a boundary, capture a single A-E, then require a non-word boundary
+  // that is typical of an option reference (so we don't touch "A política").
+  // We DO allow a following space because Portuguese "a opção A é..." and
+  // English "option A is" are common — but to avoid rewriting ordinary words
+  // we only remap when the letter is preceded by an option cue (option/opção/
+  // afirmação/resposta/alínea/letter/choice/parenthesis) OR wrapped in parens.
+  const cue = /(\b(?:op(?:tion|ção|ções)|afirma(?:ção|ções)|resposta|alínea|letter|choice|answer)\s+)([A-E])\b/gi;
+  const paren = /\(([A-E])\)/g;
+
+  const apply = (letter: string): string => {
+    const up = letter.toUpperCase() as ChoiceKey;
+    const to = remap[up];
+    return to ? to : letter;
+  };
+
+  let out = text.replace(cue, (_m, pre: string, letter: string) => `${pre}${apply(letter)}`);
+  out = out.replace(paren, (_m, letter: string) => `(${apply(letter)})`);
+  return out;
 }
 
 // Parse an LLM JSON payload expected to be { questions: [...] }.
