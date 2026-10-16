@@ -106,7 +106,9 @@ const DETECTORS: { type: NumericalType; test: (text: string, q: Question) => boo
   },
   {
     type: "ratio",
-    test: (t) => /\bratio\b|\brácio\b|times (as|more|larger|greater)|how many times|:\s*\d|relative to/i.test(t),
+    // Require explicit ratio language, or tight ratio notation (digits directly
+    // around the colon, e.g. "3:1" — NOT "2018: 18,4" value pairs or "passo 1:").
+    test: (t) => /\bratio\b|\brácio\b|times (as|more|larger|greater)|how many times|\d:\d|relative to .*\b(value|figure|amount)\b/i.test(t),
   },
 ];
 
