@@ -49,6 +49,7 @@ export default function EufteRunner() {
   const [running, setRunning] = useState(false);
   const [grade, setGrade] = useState<Grade | null>(null);
   const [grading, setGrading] = useState(false);
+  const [learnMode, setLearnMode] = useState(false);
   const submittedRef = useRef(false);
 
   const words = essay.trim() ? essay.trim().split(/\s+/).length : 0;
@@ -85,19 +86,20 @@ export default function EufteRunner() {
     }
   }, [prompt, essay]);
 
-  // Countdown; auto-submit when it hits zero.
+  // Countdown; auto-submit when it hits zero. Learn mode is untimed.
   useEffect(() => {
-    if (!running) return;
+    if (!running || learnMode) return;
     if (secondsLeft <= 0) { grateEssay(); return; }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [running, secondsLeft, grateEssay]);
+  }, [running, secondsLeft, grateEssay, learnMode]);
 
-  async function newPrompt() {
+  async function newPrompt(learn = false) {
     setLoading(true);
     setError(null);
     setGrade(null);
     setEssay("");
+    setLearnMode(learn);
     setSecondsLeft(DURATION);
     submittedRef.current = false;
     try {
@@ -136,13 +138,27 @@ export default function EufteRunner() {
           source document.
         </p>
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-        <button
-          onClick={newPrompt}
-          disabled={loading}
-          className="mt-4 rounded bg-neutral-900 px-5 py-2 text-white disabled:opacity-40"
-        >
-          {loading ? "Preparing assignment…" : "Start a timed EUFTE"}
-        </button>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            onClick={() => newPrompt(false)}
+            disabled={loading}
+            className="rounded bg-neutral-900 px-5 py-2 text-white disabled:opacity-40"
+          >
+            {loading ? "Preparing…" : "Start a timed EUFTE (40 min)"}
+          </button>
+          <button
+            onClick={() => newPrompt(true)}
+            disabled={loading}
+            className="rounded border border-neutral-900 px-5 py-2 font-medium text-neutral-900 hover:bg-neutral-100 disabled:opacity-40"
+          >
+            {loading ? "Preparing…" : "Learn mode (untimed + guidance)"}
+          </button>
+        </div>
+        <p className="mt-3 text-sm text-neutral-500">
+          Learn mode removes the timer and shows the marking anchors and a memo
+          template while you write — build the technique first, then test it
+          under time.
+        </p>
       </div>
     );
   }
@@ -194,7 +210,7 @@ export default function EufteRunner() {
         </details>
 
         <div className="mt-4 flex gap-2">
-          <button onClick={newPrompt} className="rounded bg-neutral-900 px-4 py-2 text-white">
+          <button onClick={() => newPrompt(learnMode)} className="rounded bg-neutral-900 px-4 py-2 text-white">
             New EUFTE
           </button>
           <a href="/" className="rounded border border-neutral-300 px-4 py-2">
@@ -211,26 +227,69 @@ export default function EufteRunner() {
 
   return (
     <div className="mt-6">
-      {/* Timer */}
-      <div className="flex items-center justify-between text-sm text-neutral-500">
-        <span className="font-medium text-neutral-800">{prompt.title}</span>
-        <span className={`font-semibold tabular-nums ${timePct <= 15 ? "text-red-600" : "text-neutral-700"}`}>
-          {fmt(secondsLeft)}
-        </span>
-      </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200">
-        <div
-          className={`h-full transition-[width] duration-1000 ease-linear ${barColor}`}
-          style={{ width: `${timePct}%` }}
-        />
-      </div>
+      {/* Timer (hidden in learn mode — untimed) */}
+      {learnMode ? (
+        <div className="flex items-center justify-between text-sm text-neutral-500">
+          <span className="font-medium text-neutral-800">{prompt.title}</span>
+          <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">
+            Learn mode · untimed
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between text-sm text-neutral-500">
+            <span className="font-medium text-neutral-800">{prompt.title}</span>
+            <span className={`font-semibold tabular-nums ${timePct <= 15 ? "text-red-600" : "text-neutral-700"}`}>
+              {fmt(secondsLeft)}
+            </span>
+          </div>
+          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200">
+            <div
+              className={`h-full transition-[width] duration-1000 ease-linear ${barColor}`}
+              style={{ width: `${timePct}%` }}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Learn-mode guidance: the anchors + a memo template, shown while writing */}
+      {learnMode && (
+        <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm">
+          <p className="font-semibold text-indigo-900">How this is marked — hit all five anchors (2 pts each):</p>
+          <ul className="mt-2 space-y-1 text-neutral-700">
+            <li><span className="font-medium">Structure:</span> clear opening → development → close; signpost with headings/numbering.</li>
+            <li><span className="font-medium">Conciseness:</span> cut padding; compress the source into short analytical points, don&apos;t restate it verbatim.</li>
+            <li><span className="font-medium">Clarity:</span> short, unambiguous sentences; one idea each.</li>
+            <li><span className="font-medium">Audience &amp; purpose:</span> formal register for the named reader; give decisions/recommendations, not background.</li>
+            <li><span className="font-medium">Use of source:</span> draw ONLY on the background — don&apos;t invent facts or add points it doesn&apos;t contain.</li>
+          </ul>
+          <p className="mt-3 font-semibold text-indigo-900">Memo template you can follow:</p>
+          <pre className="mt-1 whitespace-pre-wrap rounded bg-white/70 p-2 text-xs text-neutral-700">{`TO: [named audience]
+FROM: [your role]
+SUBJECT: [specific, under ~10 words]
+
+1. [First task — e.g. key provisions] — 2-4 tight points
+2. [Second task — e.g. analysis] — benefits / challenges
+3. [Third task — recommendations] — 3+ DISTINCT, actionable measures
+
+[One-line close if the task implies a decision]`}</pre>
+          <p className="mt-2 text-xs text-indigo-900">
+            Tip: vary your recommendations (don&apos;t give two of the same kind), and
+            show judgement by noting a trade-off or risk. That&apos;s the gap between 8 and 10.
+          </p>
+        </div>
+      )}
 
       {/* Background + assignment */}
       <div className="mt-4 rounded-lg border border-neutral-200 bg-white p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
           Background document
         </p>
-        <p className="mt-1 whitespace-pre-line text-sm text-neutral-700">{prompt.background}</p>
+        <p className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+          AI-generated briefing for writing practice — treat its facts as given
+          for this task only; do NOT rely on them as exam-accurate.
+        </p>
+        <p className="mt-2 whitespace-pre-line text-sm text-neutral-700">{prompt.background}</p>
         <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
           Assignment {prompt.type ? `· ${prompt.type}` : ""}
           {prompt.audience ? ` · for ${prompt.audience}` : ""}

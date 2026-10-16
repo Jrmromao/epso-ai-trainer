@@ -46,6 +46,16 @@ function buildPromptGen(): { system: string; user: string } {
     "analytical report) for a named \"audience\" (e.g. a Director-General, a " +
     "committee, a Commissioner) with a clear purpose. The test assesses WRITTEN " +
     "COMMUNICATION only — do not require outside knowledge beyond the background. " +
+    "FACTUAL CARE (important): the briefing must be INTERNALLY CONSISTENT and " +
+    "self-contained — the candidate is graded only on using what you write. To " +
+    "avoid teaching wrong facts, AVOID precise, externally-falsifiable claims " +
+    "you cannot be certain are correct: do NOT give exact named lists of " +
+    "specific real companies/people designated under a law, exact counts of " +
+    "such entities, or exact real-world dates of specific decisions. PREFER " +
+    "illustrative/rounded figures and generic actors (e.g. 'several major " +
+    "platforms', 'around €7 billion', 'a leading manufacturer') over precise " +
+    "real-world rosters. Concrete numbers the candidate must manipulate are " +
+    "fine; it is specific real-world rosters/dates that must be avoided. " +
     "No prose outside the JSON.";
   const type = ASSIGNMENT_TYPES[Math.floor(Math.random() * ASSIGNMENT_TYPES.length)];
   const user = `Generate one EUFTE assignment. Make it a ${type}. Vary the EU policy topic.`;
