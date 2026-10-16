@@ -156,6 +156,27 @@ export const STUDY_CONTENT: Partial<Record<Topic, StudyContent>> = {
           "SMEs/start-ups: the LOWER of the fixed amount or percentage applies.",
         ],
       },
+      {
+        heading: "AD8-level nuances & common traps",
+        points: [
+          "'Placing on the market' vs 'putting into service' vs 'making available' — distinct legal acts; obligations attach at specific points.",
+          "A DEPLOYER can become a PROVIDER (and take on provider duties) if they put their name on a high-risk system, substantially modify it, or change its intended purpose.",
+          "'Substantial modification' of a high-risk system re-triggers conformity assessment.",
+          "Real-time vs POST remote biometric ID: real-time in public spaces for law enforcement is prohibited (with narrow exceptions); post (retrospective) is high-risk, not prohibited.",
+          "The Annex III 'narrow-task' exemption does NOT apply if the system profiles natural persons — profiling is always high-risk.",
+          "GPAI ≠ high-risk: they are separate regimes. A GPAI model can be integrated into a high-risk system, but the GPAI rules and high-risk rules are distinct chapters.",
+          "The AI Act is a PRODUCT-SAFETY-style regulation (New Legislative Framework): CE marking, notified bodies, harmonised standards, market surveillance — not a pure fundamental-rights instrument.",
+        ],
+      },
+      {
+        heading: "Interplay with other law (AD8)",
+        points: [
+          "GDPR still applies in full to personal-data processing by AI; the AI Act is additional, not a replacement.",
+          "AI Act lex specialis for AI systems; sectoral law (medical devices MDR, machinery) integrates via Annex I.",
+          "The (proposed) AI Liability Directive + revised Product Liability Directive address civil liability — separate from the AI Act's public-enforcement regime.",
+          "Fundamental Rights: the Act operationalises the Charter; FRIA links high-risk deployment to rights impact.",
+        ],
+      },
     ],
     flashcards: [
       { front: "What regulation is the EU AI Act?", back: "Regulation (EU) 2024/1689." },
@@ -272,6 +293,18 @@ export const STUDY_CONTENT: Partial<Record<Topic, StudyContent>> = {
           "Tuning methods: grid search, random search, Bayesian optimisation.",
         ],
       },
+      {
+        heading: "AD8-level nuances & traps",
+        points: [
+          "Correlation ≠ causation: standard ML learns associations, not causal effects — important for policy use.",
+          "Precision/recall TRADE OFF via the decision threshold; the PR curve and ROC curve show this. ROC-AUC can look good on imbalanced data where PR-AUC is more honest.",
+          "Cross-validation must respect structure: time-series need forward-chaining (no shuffling); grouped data need group k-fold to avoid leakage.",
+          "Regularisation: L1 drives weights to exactly zero (feature selection/sparsity); L2 shrinks them smoothly (no exact zeros).",
+          "Ensembles: BAGGING (e.g. random forest) reduces variance; BOOSTING (e.g. XGBoost) reduces bias by sequential correction.",
+          "'No free lunch': no single algorithm is best across all problems.",
+          "Generative vs discriminative models: generative model P(x,y) (e.g. naive Bayes); discriminative model P(y|x) (e.g. logistic regression).",
+        ],
+      },
     ],
     flashcards: [
       { front: "Supervised vs unsupervised learning?", back: "Supervised uses labelled pairs; unsupervised finds structure in unlabelled data." },
@@ -383,6 +416,19 @@ export const STUDY_CONTENT: Partial<Record<Topic, StudyContent>> = {
           "Knowledge cutoff: a base model only 'knows' up to its training date → RAG/tools for current info.",
         ],
       },
+      {
+        heading: "AD8-level nuances & traps",
+        points: [
+          "RAG doesn't eliminate hallucination — the model can still misread or ignore retrieved context; retrieval quality (chunking, embedding, re-ranking) is decisive.",
+          "Fine-tuning teaches STYLE/FORMAT/BEHAVIOUR, not reliably new FACTS; for changing facts prefer RAG. Confusing these is a classic trap.",
+          "Context ≠ memory: LLMs are stateless between calls; 'memory' is re-feeding prior context within the window.",
+          "Parameter-efficient fine-tuning (LoRA/adapters) tunes a small add-on, not all weights — cheaper, avoids catastrophic forgetting.",
+          "Mixture-of-Experts (MoE): only a subset of parameters activate per token → large capacity at lower inference cost.",
+          "Quantisation/distillation shrink models for cheaper inference, trading some accuracy.",
+          "Direct Preference Optimisation (DPO) is an alternative to RLHF that skips the separate reward model.",
+          "Embeddings power semantic search; similarity is usually cosine distance in vector space.",
+        ],
+      },
     ],
     flashcards: [
       { front: "Core mechanism of the transformer?", back: "Self-attention ('Attention Is All You Need', 2017)." },
@@ -467,6 +513,18 @@ export const STUDY_CONTENT: Partial<Record<Topic, StudyContent>> = {
           "Data quality & schema: nulls, ranges, unexpected categories.",
           "Drift: input distribution + prediction distribution.",
           "Operational: latency, throughput, errors, cost, resource use.",
+        ],
+      },
+      {
+        heading: "AD8-level nuances & traps",
+        points: [
+          "Ground-truth LAG: you often can't measure accuracy immediately (labels arrive late) → monitor PROXY signals (input/prediction drift) meanwhile.",
+          "Training-serving SKEW: features computed differently in training vs serving → silent degradation; a feature store mitigates this.",
+          "Drift ≠ degraded performance automatically — detect drift, then verify impact before retraining (avoid needless retrains).",
+          "Reproducibility needs environment pinning (containers) + data/code/model versioning + seed control.",
+          "Governance under the AI Act: high-risk systems need logging, traceability and post-market monitoring — MLOps is how you comply operationally.",
+          "Model cards & datasheets document intended use, limitations, and training data — part of responsible deployment.",
+          "CI/CD for ML adds DATA and MODEL validation stages that classic software CI/CD lacks.",
         ],
       },
     ],
@@ -560,6 +618,18 @@ export const STUDY_CONTENT: Partial<Record<Topic, StudyContent>> = {
           "Redress: affected people can contest and seek a remedy.",
         ],
       },
+      {
+        heading: "AD8-level nuances & traps",
+        points: [
+          "Transparency ≠ explainability: transparency is disclosing that/how AI is used; explainability is giving reasons for a specific output.",
+          "Accuracy–fairness and accuracy–privacy TENSIONS: differential privacy noise can reduce accuracy; fairness constraints can too — these are design trade-offs, not free wins.",
+          "'Automation bias': humans over-trust automated outputs — so nominal human oversight may not be meaningful oversight.",
+          "Bias mitigation acts at three stages: PRE-processing (fix the data), IN-processing (constrain training), POST-processing (adjust outputs).",
+          "Global vs local explanations: global = overall model behaviour; local (LIME/SHAP) = why THIS prediction.",
+          "Proxy discrimination: a model can discriminate via correlated features (e.g. postcode ~ ethnicity) even without the protected attribute.",
+          "Trustworthy AI = the EU HLEG framework; it predates and informs the AI Act but is itself non-binding guidance.",
+        ],
+      },
     ],
     flashcards: [
       { front: "What is explainability (XAI)?", back: "Giving human-understandable reasons for a model's outputs." },
@@ -646,6 +716,18 @@ export const STUDY_CONTENT: Partial<Record<Topic, StudyContent>> = {
           "2020: White Paper on AI.",
           "2021: AI Act proposed. 2024: AI Act adopted (Reg. 2024/1689).",
           "Goal framing: 'excellence and trust' in AI.",
+        ],
+      },
+      {
+        heading: "AD8-level nuances & traps",
+        points: [
+          "Legal basis matters: the AI Act rests on Art. 114 TFEU (internal market harmonisation), which shapes its product-safety design — not primarily a fundamental-rights legal base.",
+          "Trilogue: the informal three-way negotiation (Parliament, Council, Commission) that reaches agreement within the ordinary legislative procedure.",
+          "Subsidiarity & proportionality: EU acts only where EU-level action adds value, and no more than necessary — a standard justification test.",
+          "A Regulation was chosen over a Directive precisely to avoid 27 divergent national transpositions fragmenting the single market.",
+          "'Risk-based + horizontal': the Act regulates AI across all sectors by risk, rather than sector-by-sector — a deliberate design choice.",
+          "Soft-law tools (Codes of Practice, Ethics Guidelines) bridge gaps before binding standards exist.",
+          "Global context: contrast the EU's comprehensive statutory approach with the more sectoral/voluntary approaches elsewhere (the 'Brussels effect' exports EU norms).",
         ],
       },
     ],

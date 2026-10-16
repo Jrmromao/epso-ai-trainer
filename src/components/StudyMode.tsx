@@ -62,16 +62,29 @@ function Concepts({ content }: { content: StudyContent }) {
         {content.summary}
       </p>
       <div className="mt-4 space-y-4">
-        {content.concepts.map((sec, i) => (
-          <div key={i} className="rounded-lg border border-neutral-200 bg-white p-4">
-            <h3 className="font-semibold text-neutral-900">{sec.heading}</h3>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-neutral-700">
-              {sec.points.map((p, j) => (
-                <li key={j}>{p}</li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        {content.concepts.map((sec, i) => {
+          const advanced = sec.heading.includes("AD8-level");
+          return (
+            <div
+              key={i}
+              className={`rounded-lg border p-4 ${advanced ? "border-indigo-300 bg-indigo-50" : "border-neutral-200 bg-white"}`}
+            >
+              <h3 className="flex items-center gap-2 font-semibold text-neutral-900">
+                {sec.heading}
+                {advanced && (
+                  <span className="rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                    AD8
+                  </span>
+                )}
+              </h3>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-neutral-700">
+                {sec.points.map((p, j) => (
+                  <li key={j}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
       </div>
       <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
         <span className="font-semibold">Verify exact figures against the primary source:</span>{" "}
