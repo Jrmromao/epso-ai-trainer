@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { Question, Topic } from "@/lib/types";
 import { isNumerical } from "@/lib/types";
+import { llmHeaders } from "@/lib/userKey";
 import type { StudyContent } from "@/data/studyContent";
 
 // Study mode for a field-knowledge topic. Three tabs:
@@ -77,9 +78,15 @@ function Concepts({ content }: { content: StudyContent }) {
                   </span>
                 )}
               </h3>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-neutral-700">
+              <ul className="mt-2 space-y-2 text-sm text-neutral-700">
                 {sec.points.map((p, j) => (
-                  <li key={j}>{p}</li>
+                  <li key={j} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0">
+                    <div className="flex items-start gap-2">
+                      <span className="mt-1 text-neutral-400">•</span>
+                      <span className="flex-1">{p}</span>
+                    </div>
+                    <ExplainButton topic={content.topic} heading={sec.heading} point={p} />
+                  </li>
                 ))}
               </ul>
             </div>
@@ -93,6 +100,84 @@ function Concepts({ content }: { content: StudyContent }) {
       </p>
     </div>
   );
+}
+
+// Per-point on-demand LLM elaboration. The hand-written point is the anchor;
+// this fetches a deeper explanation, caches it (memory + localStorage so it is
+// stable across visits and doesn't re-call), and labels it clearly as AI.
+function ExplainButton({ topic, heading, point }: { topic: Topic; heading: string; point: string }) {
+  const cacheKey = `explain:${topic}:${hashString(heading + "|" + point)}`;
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(cacheKey);
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function explain() {
+    // Toggle visibility if we already have it.
+    if (text) {
+      setOpen((o) => !o);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/explain", {
+        method: "POST",
+        headers: llmHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ topic, heading, point }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not fetch explanation.");
+      } else {
+        setText(data.explanation);
+        setOpen(true);
+        try {
+          window.localStorage.setItem(cacheKey, data.explanation);
+        } catch {
+          /* storage full / unavailable — non-fatal */
+        }
+      }
+    } catch {
+      setError("Network error. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="ml-5 mt-1">
+      <button
+        onClick={explain}
+        disabled={loading}
+        className="text-xs font-medium text-blue-700 hover:underline disabled:opacity-50"
+      >
+        {loading ? "Thinking…" : text ? (open ? "Hide explanation" : "Show explanation") : "Explain further ↓"}
+      </button>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {open && text && (
+        <div className="mt-1 rounded border border-blue-200 bg-blue-50 p-3 text-xs leading-relaxed text-neutral-800">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              AI
+            </span>
+            <span className="text-[11px] text-blue-900">AI-generated elaboration — verify specifics against the primary source.</span>
+          </div>
+          <p className="whitespace-pre-line">{text}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Small stable hash for cache keys (djb2).
+function hashString(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
 }
 
 function Flashcards({ content }: { content: StudyContent }) {

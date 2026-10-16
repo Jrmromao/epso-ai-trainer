@@ -177,6 +177,25 @@ export const STUDY_CONTENT: Partial<Record<Topic, StudyContent>> = {
           "Fundamental Rights: the Act operationalises the Charter; FRIA links high-risk deployment to rights impact.",
         ],
       },
+      {
+        heading: "Conformity assessment & standards",
+        points: [
+          "Most Annex III high-risk systems use INTERNAL control (self-assessment); some (e.g. certain biometrics) need a NOTIFIED BODY (third party).",
+          "Harmonised standards (from CEN/CENELEC, mandated by the Commission) give a PRESUMPTION OF CONFORMITY.",
+          "Outputs: EU declaration of conformity, CE marking, registration in the EU database of high-risk systems.",
+          "Post-market monitoring + serious-incident reporting are ongoing obligations after deployment.",
+        ],
+      },
+      {
+        heading: "Key dates (verify exact)",
+        points: [
+          "Entry into force: 1 August 2024.",
+          "Prohibitions (Art. 5): apply from ~February 2025 (6 months).",
+          "GPAI obligations: from ~August 2025 (12 months).",
+          "High-risk (Annex III) obligations: from ~August 2026 (24 months).",
+          "High-risk as safety components under Annex I: ~August 2027 (36 months). Confirm each date against the Act.",
+        ],
+      },
     ],
     flashcards: [
       { front: "What regulation is the EU AI Act?", back: "Regulation (EU) 2024/1689." },
@@ -198,6 +217,10 @@ export const STUDY_CONTENT: Partial<Record<Topic, StudyContent>> = {
       { front: "Which uses are excluded from the AI Act?", back: "Military/defence/national security, pure scientific R&D, and (largely) FOSS unless high-risk/GPAI." },
       { front: "What definition of 'AI system' does the Act align with?", back: "The OECD definition — a machine-based system that infers from inputs how to generate outputs influencing environments." },
       { front: "What do systemic-risk GPAI providers must do extra?", back: "Model evaluations/red-teaming, systemic-risk mitigation, incident reporting, cybersecurity." },
+      { front: "When did the AI Act enter into force?", back: "1 August 2024 (prohibitions ~6 months later, high-risk ~24 months) — verify exact dates." },
+      { front: "What gives a 'presumption of conformity'?", back: "Conformity with harmonised standards (CEN/CENELEC)." },
+      { front: "Internal control vs notified body?", back: "Most Annex III use self-assessment; some (e.g. certain biometrics) need a third-party notified body." },
+      { front: "Two ongoing post-deployment obligations?", back: "Post-market monitoring and serious-incident reporting." },
     ],
   },
 
@@ -294,6 +317,17 @@ export const STUDY_CONTENT: Partial<Record<Topic, StudyContent>> = {
         ],
       },
       {
+        heading: "Beyond ML: the wider AI field (often tested)",
+        points: [
+          "AI ⊃ ML ⊃ deep learning: AI is the broad field; ML learns from data; deep learning uses deep neural nets. Don't conflate them.",
+          "SYMBOLIC / 'good old-fashioned AI': rules, logic, knowledge representation, expert systems, search (e.g. A*, minimax) — not learned from data.",
+          "Search & optimisation: breadth/depth-first, heuristic (A*), constraint satisfaction, genetic algorithms.",
+          "Knowledge representation: ontologies, knowledge graphs, semantic web.",
+          "Turing test; 'narrow' vs 'general' (AGI) AI; the symbolic-vs-connectionist debate.",
+          "NLP tasks: classification, NER, translation, summarisation, QA; computer vision: detection, segmentation, classification.",
+        ],
+      },
+      {
         heading: "AD8-level nuances & traps",
         points: [
           "Correlation ≠ causation: standard ML learns associations, not causal effects — important for policy use.",
@@ -322,6 +356,10 @@ export const STUDY_CONTENT: Partial<Record<Topic, StudyContent>> = {
       { front: "Good algorithm for tabular data?", back: "Gradient boosting (e.g. XGBoost) or random forests." },
       { front: "What does the learning rate control?", back: "Step size in gradient descent — too high diverges, too low is slow." },
       { front: "What is feature engineering?", back: "Creating/selecting informative input features — often decisive for classical ML." },
+      { front: "AI vs ML vs deep learning?", back: "AI is the broad field; ML learns from data; deep learning uses deep neural nets (AI ⊃ ML ⊃ DL)." },
+      { front: "What is symbolic (GOFAI) AI?", back: "Rule/logic/knowledge-based AI (expert systems, search) — not learned from data." },
+      { front: "Narrow vs general AI?", back: "Narrow = one task (all current AI); general (AGI) = human-level across tasks (hypothetical)." },
+      { front: "What is A* ?", back: "A heuristic search algorithm — part of classical (symbolic) AI, not ML." },
     ],
   },
 
