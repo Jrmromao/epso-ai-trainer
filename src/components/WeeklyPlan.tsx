@@ -7,7 +7,9 @@ import { migrateLegacyHistory } from "@/lib/storage/migrateLegacyHistory";
 import {
   type PlanConfig,
   type StudyBlock,
+  type StudyLevel,
   DEFAULT_PLAN_CONFIG,
+  LEVEL_LABELS,
   TECHNIQUE_LABELS,
   buildWeeklyPlan,
   toComponentStatuses,
@@ -31,6 +33,23 @@ const RESOURCE: Record<
     secondary: { href: "/tutorials/abstract-reasoning", label: "Technique guide" },
   },
   essay: { href: "/eufte", label: "EUFTE essay (timed + graded)" },
+};
+
+// Where a beginner "learn" (study-first) block sends the user. Field AI has no
+// single Study page, so route to the AI Act study entry as the starting point;
+// abstract routes to its technique tutorial.
+const STUDY_RESOURCE: Partial<Record<ExamComponent, { href: string; label: string }>> = {
+  "field-ai": { href: "/study/ai-act", label: "Study: AI concepts" },
+  numerical: { href: "/mock/numerical", label: "Numerical learn mode" },
+  verbal: { href: "/mock/verbal", label: "Verbal learn mode" },
+  abstract: { href: "/tutorials/abstract-reasoning", label: "Read the technique guide" },
+  essay: { href: "/eufte", label: "EUFTE essay guide" },
+};
+
+const PHASE_LABELS: Record<1 | 2 | 3, string> = {
+  1: "Phase 1 · Learn",
+  2: "Phase 2 · Gentle practice",
+  3: "Phase 3 · Exam conditions",
 };
 
 function loadConfig(): PlanConfig {
@@ -84,14 +103,39 @@ export default function WeeklyPlan() {
     <section className="mt-8">
       <h2 className="text-lg font-semibold">This week&rsquo;s study plan</h2>
       <p className="mt-1 text-sm text-neutral-600">
-        Weak-topic-weighted and rebuilt every visit from your latest results.
-        It allocates the week across all five exam components &mdash; including
-        the eliminatory abstract gate, now drillable in-app &mdash; and tells
-        you which technique to use for each block.
+        {config.level === "beginner" ? (
+          <>
+            A foundations-first ramp for someone new to the material:{" "}
+            <strong>learn the concepts first</strong>, then gentle untimed
+            practice, then your first timed mock. No weak-area weighting yet
+            &mdash; switch to Intermediate once you have some results.
+          </>
+        ) : (
+          <>
+            Weak-topic-weighted and rebuilt every visit from your latest
+            results. It allocates the week across all five exam components
+            &mdash; including the eliminatory abstract gate, now drillable in-app
+            &mdash; and tells you which technique to use for each block.
+          </>
+        )}
       </p>
 
       {/* Config */}
       <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-neutral-300 bg-white p-3 text-sm">
+        <label className="flex items-center gap-2">
+          Level:
+          <select
+            className="rounded border border-neutral-300 px-2 py-1"
+            value={config.level}
+            onChange={(e) => updateConfig({ level: e.target.value as StudyLevel })}
+          >
+            {(["beginner", "intermediate", "advanced"] as StudyLevel[]).map((lvl) => (
+              <option key={lvl} value={lvl}>
+                {LEVEL_LABELS[lvl]}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="flex items-center gap-2">
           Days/week:
           <select
@@ -129,6 +173,8 @@ export default function WeeklyPlan() {
         <ol className="mt-3 space-y-2">
           {blocks.map((b, i) => {
             const res = RESOURCE[b.component];
+            const studyRes = b.mode === "study" ? STUDY_RESOURCE[b.component] : undefined;
+            const primary = studyRes ?? res;
             return (
               <li
                 key={i}
@@ -140,6 +186,11 @@ export default function WeeklyPlan() {
                       <span className="rounded bg-neutral-900 px-2 py-0.5 text-xs font-semibold text-white">
                         Day {b.day}
                       </span>
+                      {b.phase && (
+                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-800">
+                          {PHASE_LABELS[b.phase]}
+                        </span>
+                      )}
                       <span className="font-medium">{b.label}</span>
                       <span className="text-xs text-neutral-500">· {b.minutes} min</span>
                       {b.component === "abstract" && (
@@ -157,16 +208,16 @@ export default function WeeklyPlan() {
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <a
-                      href={res.href}
+                      href={primary.href}
                       className={`rounded px-3 py-1.5 text-xs font-medium ${
                         b.inApp
                           ? "bg-neutral-900 text-white"
                           : "border border-neutral-300 text-neutral-700"
                       }`}
                     >
-                      {b.inApp ? res.label : "External"}
+                      {b.inApp ? primary.label : "External"}
                     </a>
-                    {res.secondary && (
+                    {!studyRes && res.secondary && (
                       <a
                         href={res.secondary.href}
                         className="rounded border border-neutral-300 px-3 py-1 text-[11px] text-neutral-600 hover:border-neutral-900"

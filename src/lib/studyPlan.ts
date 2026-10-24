@@ -145,14 +145,24 @@ export const TECHNIQUE_LABELS: Record<StudyTechnique, string> = {
   elaboration: "Explain-why before revealing",
 };
 
+export type StudyLevel = "beginner" | "intermediate" | "advanced";
+
 export interface PlanConfig {
   daysPerWeek: number; // 1..7
   minutesPerSession: number;
+  level: StudyLevel;
 }
 
 export const DEFAULT_PLAN_CONFIG: PlanConfig = {
   daysPerWeek: 5,
   minutesPerSession: 30,
+  level: "intermediate",
+};
+
+export const LEVEL_LABELS: Record<StudyLevel, string> = {
+  beginner: "Beginner — new to the material",
+  intermediate: "Intermediate — some familiarity",
+  advanced: "Advanced — revising for the exam",
 };
 
 export interface StudyBlock {
@@ -163,6 +173,11 @@ export interface StudyBlock {
   minutes: number;
   reason: string;
   inApp: boolean;
+  // Beginner plans run in phases (learn -> gentle practice -> exam conditions).
+  // Omitted for intermediate/advanced (adaptive) plans.
+  phase?: 1 | 2 | 3;
+  // For a beginner "learn" block, send the user to the Study page first.
+  mode?: "study" | "practice";
 }
 
 // Priority score for allocation: weaker + more neglected + never-touched rank
@@ -193,8 +208,109 @@ function techniqueFor(component: ExamComponent, isReview: boolean): StudyTechniq
 }
 
 // Build a rolling weekly plan. Recompute on each visit so it always reflects
-// current weakness (adaptive; no frozen plan is persisted).
+// current weakness (adaptive; no frozen plan is persisted). For beginners, the
+// plan is a foundations-first phased ramp instead (see buildBeginnerPlan).
 export function buildWeeklyPlan(
+  statuses: ComponentStatus[],
+  dueCount: number,
+  config: PlanConfig = DEFAULT_PLAN_CONFIG,
+): StudyBlock[] {
+  if (config.level === "beginner") {
+    return buildBeginnerPlan(statuses, config);
+  }
+  return buildAdaptivePlan(statuses, dueCount, config);
+}
+
+// Beginner plan — foundations-first. A near-beginner has no useful accuracy
+// signal and should NOT be dropped into timed, interleaved mocks: the research
+// (and common sense) says you need baseline schema before desirable-difficulty
+// techniques (spacing, interleaving, timed retrieval) pay off. So the week
+// ramps through three phases:
+//   Phase 1 — LEARN: read the concept (Study page) with explain-why elaboration.
+//   Phase 2 — GENTLE PRACTICE: untimed/learn-mode drills, ONE component at a
+//             time (blocked, not interleaved) to build confidence.
+//   Phase 3 — RAMP: a first timed, interleaved mock to meet exam conditions.
+// Field AI concepts come first (the bulk of the field test), then the
+// eliminatory reasoning gate, then the essay. Abstract is flagged as the gate
+// and gets a learn-the-technique block.
+function buildBeginnerPlan(statuses: ComponentStatus[], config: PlanConfig): StudyBlock[] {
+  const days = Math.max(1, Math.min(config.daysPerWeek, 7));
+  const minutes = config.minutesPerSession;
+
+  // Learn-first order: field AI (largest surface), then the reasoning gate
+  // components, then essay. Abstract gets a technique-learning slot.
+  const learnOrder: { component: ExamComponent; technique: StudyTechnique; reason: string }[] = [
+    { component: "field-ai", technique: "elaboration", reason: "Start with the AI field concepts — read and explain them back before testing." },
+    { component: "numerical", technique: "elaboration", reason: "Learn the numerical operation types (percentage change, ratio, share) in learn mode — untimed." },
+    { component: "verbal", technique: "elaboration", reason: "Learn how verbal reading-comprehension traps work before practising under time." },
+    { component: "abstract", technique: "external-drill", reason: "Read the abstract-reasoning technique guide — this gate is pattern-spotting, not knowledge." },
+    { component: "essay", technique: "elaboration", reason: "Read the EUFTE essay structure; draft one untimed before the graded version." },
+  ];
+
+  const blocks: StudyBlock[] = [];
+  let day = 1;
+
+  // Phase 1 — LEARN (first ~60% of the week, at least 1 day): concept reading.
+  const learnDays = Math.max(1, Math.round(days * 0.6));
+  for (let i = 0; i < learnDays && day <= days; i++) {
+    const item = learnOrder[i % learnOrder.length];
+    blocks.push({
+      day,
+      component: item.component,
+      label: `Learn: ${COMPONENT_LABELS[item.component]}`,
+      technique: item.technique,
+      minutes,
+      reason: item.reason,
+      inApp: IN_APP_COMPONENTS.has(item.component),
+      phase: 1,
+      mode: "study",
+    });
+    day += 1;
+  }
+
+  // Phase 2 — GENTLE PRACTICE (blocked, untimed/learn-mode): consolidate the
+  // first couple of learned components one at a time.
+  const practiceComponents: ExamComponent[] = ["field-ai", "numerical", "verbal"];
+  let pi = 0;
+  while (day <= days && day <= days - 1 && blocks.length < days) {
+    const component = practiceComponents[pi % practiceComponents.length];
+    blocks.push({
+      day,
+      component,
+      label: `Practice (untimed): ${COMPONENT_LABELS[component]}`,
+      technique: "retrieval",
+      minutes,
+      reason: "Gentle, untimed practice on one topic at a time — build accuracy before adding the clock.",
+      inApp: IN_APP_COMPONENTS.has(component),
+      phase: 2,
+      mode: "practice",
+    });
+    pi += 1;
+    day += 1;
+  }
+
+  // Phase 3 — RAMP: one timed, interleaved field mock to meet exam conditions.
+  if (day <= days) {
+    blocks.push({
+      day,
+      component: "field-ai",
+      label: "First timed mock (exam conditions)",
+      technique: "interleaving",
+      minutes,
+      reason: "Now add the clock: a mixed, timed set so the format and pressure feel familiar before the real thing.",
+      inApp: true,
+      phase: 3,
+      mode: "practice",
+    });
+    day += 1;
+  }
+
+  return blocks;
+}
+
+// Adaptive plan — the original weak-area-weighted director for intermediate /
+// advanced users who already have a useful accuracy signal.
+function buildAdaptivePlan(
   statuses: ComponentStatus[],
   dueCount: number,
   config: PlanConfig = DEFAULT_PLAN_CONFIG,
