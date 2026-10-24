@@ -739,6 +739,48 @@ const TOPIC_FOCUS: Partial<Record<Topic, string>> = {
     "Focus on EU AI governance, the GPAI ecosystem, societal impact, the AI Office's role, and AI policy/enforcement in an EU-institutional context.",
 };
 
+// Per-topic NAMED distractor traps — the specific, high-yield confusions the
+// real AD8 field test exploits. Steering the model to encode THESE as wrong
+// options (rather than generic "plausible but wrong" text) is what pushes items
+// to genuine exam difficulty. One distractor per item should come from this set.
+const TOPIC_TRAPS: Partial<Record<Topic, string>> = {
+  "ai-act":
+    " NAMED TRAPS (use at least one per item as a distractor): (a) PENALTY-TIER" +
+    " CONFUSION — Article 99(3) prohibited-practice fines (up to €35M / 7% of" +
+    " worldwide annual turnover) vs Article 99(4) high-risk / general" +
+    " non-compliance fines (up to €15M / 3%); (b) SCOPE SWAP of roles — PROVIDER" +
+    " conformity-assessment duties vs DEPLOYER operational duties (logging, human" +
+    " oversight, input-data relevance); (c) ENFORCEMENT SWAP — the European AI" +
+    " Office (centralised, GPAI/systemic-risk) vs national Market Surveillance" +
+    " Authorities (downstream high-risk systems); (d) RISK-TIER UNDERSTATEMENT —" +
+    " labelling an Annex III high-risk use as mere limited/transparency risk; (e)" +
+    " CONSENT FALLACY — asserting that user consent makes an Article 5 prohibited" +
+    " practice lawful.",
+  mlops:
+    " NAMED TRAPS (use at least one per item as a distractor): (a) DRIFT" +
+    " CONFUSION — data/covariate drift (a shift in P(X), the input distribution)" +
+    " vs concept drift (a shift in P(Y|X), the input→label relationship); (b)" +
+    " BLIND RETRAINING — recommending scheduled retraining without a trigger" +
+    " signal; (c) THRESHOLD MASKING — adjusting the decision/confidence threshold" +
+    " to hide degradation rather than detect it; (d) DELAYED-LABEL TRAP — waiting" +
+    " for delayed ground-truth instead of monitoring proxy signals (feature PSI," +
+    " output-probability distribution) to catch drift early.",
+  "trustworthy-ai":
+    " NAMED TRAPS (use at least one per item as a distractor): (a) ACCURACY" +
+    " ILLUSION under class imbalance — claiming high overall accuracy or ROC-AUC" +
+    " proves performance/fairness, when PR-AUC, positive-class F1 or disaggregated" +
+    " group error rates are needed; (b) FAIRNESS-BY-BLINDNESS — dropping protected" +
+    " attributes to 'guarantee' non-discrimination while ignoring proxy variables;" +
+    " (c) METRIC CONFUSION — Demographic Parity vs Equalized Odds (equal positive" +
+    " rates vs equal error rates across groups).",
+  "ml-fundamentals":
+    " NAMED TRAPS (use at least one per item as a distractor): (a) class-imbalance" +
+    " ACCURACY ILLUSION (accuracy/ROC-AUC vs PR-AUC/F1); (b) data vs concept drift;" +
+    " (c) overfitting-vs-underfitting direction errors; (d) leakage disguised as" +
+    " strong validation performance.",
+};
+
+
 // Per-difficulty instruction blocks injected into every generation prompt.
 // These define what "easy / medium / hard" means in concrete distractor terms
 // so the model calibrates distractor quality, not just stem complexity.
@@ -837,7 +879,16 @@ export function buildGenerationPrompt(
       " and every distractor must be a plausible action/classification/" +
       " conclusion FOR THAT SPECIFIC SITUATION — not a generic definition. Do" +
       " not pad trivial recall questions with a fake scenario; the scenario must" +
-      " genuinely drive the reasoning."
+      " genuinely drive the reasoning." +
+      " TWO-CONCEPT FUSION (critical for AD8 difficulty): the scenario must force" +
+      " the candidate to combine TWO related concepts, not recall one in" +
+      " isolation. For example: a high-risk Annex III recruitment tool that also" +
+      " performs workplace emotion recognition (Annex III classification ×" +
+      " Article 5 prohibition); a model showing input-distribution shift while" +
+      " ground-truth labels arrive weeks late (drift detection × delayed labels);" +
+      " a 98%-accuracy classifier on a 1%-positive problem (headline metric ×" +
+      " class imbalance). State both concepts in the vignette so the correct" +
+      " answer depends on resolving their interaction."
     : "";
 
   // Per-option learn-mode notes for field items: after answering, the app shows
@@ -892,9 +943,10 @@ export function buildGenerationPrompt(
     languageNote;
 
   const focus = TOPIC_FOCUS[topic] ? ` ${TOPIC_FOCUS[topic]}` : "";
+  const traps = isFieldTopic && TOPIC_TRAPS[topic] ? TOPIC_TRAPS[topic] : "";
   const source = articleText
     ? `Base the questions strictly on this source text:\n\n${articleText.slice(0, 6000)}`
-    : `Topic: ${TOPIC_LABELS[topic]} (EPSO AD8 Artificial Intelligence competition).${focus}`;
+    : `Topic: ${TOPIC_LABELS[topic]} (EPSO AD8 Artificial Intelligence competition).${focus}${traps}`;
 
   const user = `Generate ${count} ${difficulty}-difficulty exam-realistic questions. ${source}`;
 

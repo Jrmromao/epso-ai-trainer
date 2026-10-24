@@ -283,13 +283,19 @@ export default function MockRunner({
       </div>
 
       {!revealed && (
-        <button
-          onClick={() => submit(chosen)}
-          disabled={chosen === null}
-          className="mt-4 rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40"
-        >
-          Submit
-        </button>
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={() => submit(chosen)}
+            disabled={chosen === null}
+            className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-40"
+          >
+            Submit
+          </button>
+          <p className="text-xs text-neutral-500">
+            No negative marking — always pick an answer, even a guess. Leaving it
+            blank can only lose you marks.
+          </p>
+        </div>
       )}
 
       {revealed && (

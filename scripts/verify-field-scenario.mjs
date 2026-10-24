@@ -14,6 +14,16 @@ const field = buildGenerationPrompt("ai-act", 5, undefined, "hard", "en");
 check("field prompt requests SCENARIO FORMAT", /SCENARIO FORMAT/.test(field.system));
 check("field prompt requests optionNotes", /optionNotes/.test(field.system));
 check("field prompt output shape includes optionNotes", /"optionNotes":\{/.test(field.system));
+check("field prompt requires TWO-CONCEPT FUSION", /TWO-CONCEPT FUSION/.test(field.system));
+check("ai-act prompt carries penalty-tier trap (99(3)/99(4))", /99\(3\)/.test(field.user) && /99\(4\)/.test(field.user));
+check("ai-act prompt carries provider/deployer scope-swap trap", /PROVIDER/.test(field.user) && /DEPLOYER/.test(field.user));
+
+// 1b) Topic-specific named traps appear for mlops and trustworthy-ai.
+const mlops = buildGenerationPrompt("mlops", 5, undefined, "hard", "en");
+check("mlops prompt carries P(X) vs P(Y|X) drift trap", /P\(X\)/.test(mlops.user) && /P\(Y\|X\)/.test(mlops.user));
+const trust = buildGenerationPrompt("trustworthy-ai", 5, undefined, "hard", "en");
+check("trustworthy-ai prompt carries PR-AUC vs accuracy trap", /PR-AUC/.test(trust.user));
+check("trustworthy-ai prompt carries parity vs equalized-odds trap", /Equalized Odds/i.test(trust.user));
 
 // 2) Verbal T/F prompt does NOT get the scenario block (it has a fixed format).
 const verbal = buildGenerationPrompt("verbal", 5, undefined, "medium", "en");
