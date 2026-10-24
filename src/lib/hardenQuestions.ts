@@ -31,7 +31,7 @@ export async function hardenQuestions(
       ],
       config,
     );
-    const hardened = parseQuestions(raw, topic);
+    const hardened = parseQuestions(raw, topic, undefined, undefined, { mode: "preserve" });
 
     // Only accept the hardened set if it preserves the question count. Fewer
     // questions means the critique dropped or broke some -> not an improvement.

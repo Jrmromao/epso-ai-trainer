@@ -144,6 +144,105 @@ function finalCandidatesFromWorkedSolution(ws: string): number[] {
   return parseNumericCandidates(matches[matches.length - 1]);
 }
 
+// Stricter single-value parse for COMPOUND-answer validation. The lenient
+// `parseNumericCandidates` returns BOTH a decimal and a thousands reading for
+// an ambiguous separator (so "3,2" -> [32, 3.2]). That ambiguity is dangerous
+// when validating a multi-number option: the spurious thousands reading (32)
+// can cross-match an unrelated solution value (32.11), making a WRONG option
+// look consistent. For compound validation we disambiguate by shape:
+//   - a single comma/dot followed by 1-2 digits is a DECIMAL (e.g. 3,2 / 1,05)
+//   - grouped thousands (e.g. 148 620, 196.340) collapse to the integer
+// so each token yields exactly ONE value and cannot cross-match spuriously.
+function parseStrictNumber(token: string): number | null {
+  const cleaned = token
+    .replace(/[\u2212\u2013\u2014]/g, "-")
+    .replace(/[€$£%]/g, " ")
+    .replace(/\s/g, "")
+    .trim();
+  const m = cleaned.match(/^[-+]?\d[\d.,]*\d$|^[-+]?\d$/);
+  if (!m) return null;
+  const sign = cleaned.startsWith("-") ? -1 : 1;
+  const tok = cleaned.replace(/^[-+]/, "");
+  const lastDot = tok.lastIndexOf(".");
+  const lastComma = tok.lastIndexOf(",");
+  let v: number;
+  if (lastDot !== -1 && lastComma !== -1) {
+    // Last separator is the decimal point.
+    v = lastComma > lastDot
+      ? Number(tok.replace(/\./g, "").replace(",", "."))
+      : Number(tok.replace(/,/g, ""));
+  } else if (lastComma !== -1) {
+    const after = tok.length - lastComma - 1;
+    const single = (tok.match(/,/g) || []).length === 1;
+    // Single comma with 1-2 trailing digits => decimal (3,2 / 1,05 / 24,3).
+    // Otherwise (multiple commas, or exactly 3 trailing digits) => thousands.
+    v = single && after > 0 && after <= 2
+      ? Number(tok.replace(",", "."))
+      : Number(tok.replace(/,/g, ""));
+  } else if (lastDot !== -1) {
+    const after = tok.length - lastDot - 1;
+    const single = (tok.match(/\./g) || []).length === 1;
+    v = single && after > 0 && after <= 2
+      ? Number(tok)
+      : Number(tok.replace(/\./g, ""));
+  } else {
+    v = Number(tok);
+  }
+  return Number.isFinite(v) ? sign * v : null;
+}
+
+// Like `allNumericTokens` but each token resolves to a SINGLE disambiguated
+// value (see parseStrictNumber). Used only for compound-answer validation.
+function strictNumericTokens(s: string): number[] {
+  if (typeof s !== "string") return [];
+  const norm = s.replace(/[\u2212\u2013\u2014]/g, "-");
+  const matches = norm.match(/[-+]?\d[\d.,\s]*\d|[-+]?\d/g);
+  if (!matches) return [];
+  return matches
+    .map((m) => parseStrictNumber(m))
+    .filter((v): v is number => v !== null);
+}
+
+// How many numeric components does each answer OPTION carry? EPSO items are
+// usually single-value, but some phrase a compound answer ("X%, i.e. N times").
+// We take the maximum token count across the A-D options (ignoring a terminal
+// "none/cannot" E) as the item's expected component count.
+function optionComponentCount(choices: Choices): number {
+  let max = 0;
+  for (const k of ["A", "B", "C", "D", "E"] as ChoiceKey[]) {
+    const label = choices[k];
+    if (typeof label !== "string" || !label.trim()) continue;
+    const n = strictNumericTokens(label).length;
+    if (n > max) max = n;
+  }
+  return max;
+}
+
+// Multi-component consistency gate. When options carry two or more numbers, the
+// single-value `reconcileNumericalAnswer` is not enough: it can lock onto one
+// matching number (e.g. the percentage) while the second (e.g. the ratio) is
+// wrong in EVERY option — meaning the correct answer isn't present at all.
+//
+// This builds the set of target values the worked solution actually computes,
+// then requires the chosen option's EVERY numeric component to match one of
+// those targets. Returns:
+//   true  -> the option is fully consistent (all its numbers are supported)
+//   false -> at least one component is unsupported -> caller should reject.
+function optionFullyConsistent(optionLabel: string, workedSolution: string): boolean {
+  const optionTokens = strictNumericTokens(optionLabel);
+  if (optionTokens.length <= 1) return true; // single-value: handled elsewhere
+
+  // All numbers the worked solution mentions (not just the last one), since a
+  // compound answer's components appear at different points in the working.
+  const solutionValues = strictNumericTokens(workedSolution);
+  if (solutionValues.length === 0) return true; // can't verify -> don't reject here
+
+  // Every component of the option must be backed by SOME value the solution
+  // computed. A component with no support (e.g. a ratio of 1,6 when the maths
+  // yields 1,05) fails the gate.
+  return optionTokens.every((v) => solutionValues.some((t) => numbersClose(v, t)));
+}
+
 // Two numbers "match" if within a small relative tolerance (handles rounding).
 function numbersClose(a: number, b: number): boolean {
   if (a === b) return true;
@@ -156,18 +255,56 @@ function candidatesMatch(optVals: number[], targetVals: number[]): boolean {
   return optVals.some((o) => targetVals.some((t) => numbersClose(o, t)));
 }
 
+// Detect an explicit "the correct answer is X" statement inside the worked
+// solution / explanation and return the letter it names, if any. The LLM
+// sometimes writes a coherent-looking rationale that names a DIFFERENT letter
+// than the answer key (then rationalises the mismatch). That self-contradiction
+// is a reliable signal the item is broken. Matches EN and PT phrasings.
+function statedCorrectLetter(text: string): ChoiceKey | null {
+  if (typeof text !== "string" || !text) return null;
+  const patterns = [
+    /correct answer is\s*\(?([A-E])\)?/i,
+    /answer is\s*\(?([A-E])\)?/i,
+    /resposta\s+correta\s+é\s*\(?([A-E])\)?/i,
+    /a\s+op(?:ção|cao)\s+correta\s+é\s*\(?([A-E])\)?/i,
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m) return m[1].toUpperCase() as ChoiceKey;
+  }
+  return null;
+}
+
 // Returns a corrected ChoiceKey, or null if the question should be rejected.
 function reconcileNumericalAnswer(
   choices: Choices,
   declared: ChoiceKey,
   workedSolution: string,
 ): ChoiceKey | null {
-  const target = finalCandidatesFromWorkedSolution(workedSolution);
-  if (target.length === 0) return declared; // can't extract -> trust declared
-
   const keys = (["A", "B", "C", "D", "E"] as ChoiceKey[]).filter(
     (k) => typeof choices[k] === "string" && (choices[k] as string).trim(),
   );
+
+  // MULTI-COMPONENT answers ("X%, i.e. N times"): the single-value gate below
+  // only checks ONE number and can wrongly accept an option whose first number
+  // matches while its second is unsupported by the maths. Here we require the
+  // chosen option's EVERY numeric component to be backed by the worked
+  // solution, and that exactly one option qualifies. If none qualifies, the
+  // correct compound answer isn't in the option set -> reject the item.
+  if (optionComponentCount(choices) >= 2) {
+    const consistent = keys.filter((k) =>
+      optionFullyConsistent(choices[k] as string, workedSolution),
+    );
+    if (consistent.length === 1) return consistent[0];
+    if (consistent.length === 0) return null; // correct answer absent -> drop
+    // Several options are fully consistent (shouldn't happen for a well-formed
+    // item, but be safe): prefer the declared one if it qualifies, else reject
+    // rather than guess — a wrong key here actively mis-trains.
+    return consistent.includes(declared) ? declared : null;
+  }
+
+  const target = finalCandidatesFromWorkedSolution(workedSolution);
+  if (target.length === 0) return declared; // can't extract -> trust declared
 
   const matches = keys.filter((k) => candidatesMatch(parseNumericCandidates(choices[k] as string), target));
 
@@ -280,6 +417,17 @@ export function validateQuestion(raw: unknown, topic: Topic, difficulty: Difficu
       if (clean.length > 0) steps = clean;
     }
 
+    // Self-contradiction gate: if the worked solution / explanation explicitly
+    // names a correct letter that DISAGREES with the answer key, the item is
+    // internally inconsistent (the model wrote a rationale for one letter but
+    // keyed another, then rationalised the mismatch). Drop it.
+    const stated = statedCorrectLetter(
+      `${q.workedSolution} ${base.explanation}`,
+    );
+    if (stated && stated !== base.answer && typeof builtChoices[stated] === "string") {
+      return null;
+    }
+
     // Answer-key consistency gate: make the labelled answer agree with the
     // value the worked solution actually computes (fixes LLM rounding / wrong
     // letter). Returns null when the item is internally inconsistent -> drop it
@@ -323,48 +471,100 @@ const TERMINAL_E_SNIPPETS = [
   "none of the above", "cannot be determined", "nenhuma das anteriores", "impossível responder",
 ];
 
-function shuffleAnswer(q: Question): Question {
-  // Skip verbal T/F (fixed semantic order).
-  const aLabel = (q.choices.A ?? "").toLowerCase();
-  const bLabel = (q.choices.B ?? "").toLowerCase();
-  if (FIXED_ORDER_SNIPPETS.some((s) => aLabel.includes(s) || bLabel.includes(s))) {
-    return q;
-  }
-
+// Returns the set of present (non-placeholder) option slots for a question,
+// in order. A terminal "none/cannot" E is reported separately so callers can
+// keep it pinned last.
+function presentSlots(q: Question): { present: ChoiceKey[]; pinLast: boolean } {
   const present: ChoiceKey[] = (["A", "B", "C", "D", "E"] as ChoiceKey[]).filter((k) => {
     const l = q.choices[k];
     return typeof l === "string" && l.trim() && l !== "-" && l !== "(unused)";
   });
-  if (present.length < 2) return q;
-
-  // Keep a terminal "E" (none/cannot) pinned last; shuffle the rest.
+  if (present.length < 2) return { present, pinLast: false };
   const lastKey = present[present.length - 1];
   const lastLabel = (q.choices[lastKey] ?? "").toLowerCase();
   const pinLast = TERMINAL_E_SNIPPETS.some((s) => lastLabel.includes(s));
+  return { present, pinLast };
+}
+
+// True when a question's options may be reordered. Verbal T/F has a fixed
+// semantic order and must never be shuffled.
+function isReorderable(q: Question): boolean {
+  const aLabel = (q.choices.A ?? "").toLowerCase();
+  const bLabel = (q.choices.B ?? "").toLowerCase();
+  if (FIXED_ORDER_SNIPPETS.some((s) => aLabel.includes(s) || bLabel.includes(s))) return false;
+  const { present } = presentSlots(q);
+  return present.length >= 2;
+}
+
+// The slots the correct answer is ALLOWED to occupy for this question (i.e. the
+// shufflable positions — excludes a pinned terminal E). Empty if not
+// reorderable. Used by the batch balancer to pick a legal target slot.
+function allowedCorrectSlots(q: Question): ChoiceKey[] {
+  if (!isReorderable(q)) return [];
+  const { present, pinLast } = presentSlots(q);
+  return pinLast ? present.slice(0, -1) : present.slice();
+}
+
+// Place a question's options so the CORRECT option lands in `targetSlot`, and
+// the remaining distractors fill the other shufflable slots (randomly). If
+// `targetSlot` is undefined, the shufflable options are fully randomised
+// (legacy behaviour). A pinned terminal E always stays last. All letter
+// references in explanation / workedSolution / steps / optionNotes are remapped
+// to the new positions.
+function placeAnswer(q: Question, targetSlot?: ChoiceKey): Question {
+  if (!isReorderable(q)) return q;
+
+  const { present, pinLast } = presentSlots(q);
   const shufflable = pinLast ? present.slice(0, -1) : present.slice();
 
-  // Collect (originalKey, label, wasCorrect) for the shufflable set so we can
-  // build an old->new letter remap to also fix letter references in the
-  // explanation/worked solution.
-  const items = shufflable.map((k) => ({ from: k, label: q.choices[k]!, correct: k === q.answer }));
-  // Fisher-Yates.
-  for (let i = items.length - 1; i > 0; i--) {
+  // Separate the correct item (if it's in the shufflable set) from distractors.
+  const correctItem = shufflable
+    .filter((k) => k === q.answer)
+    .map((k) => ({ from: k, label: q.choices[k]! }))[0];
+  const distractors = shufflable
+    .filter((k) => k !== q.answer)
+    .map((k) => ({ from: k, label: q.choices[k]! }));
+
+  // Randomise distractor order (Fisher-Yates).
+  for (let i = distractors.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [items[i], items[j]] = [items[j], items[i]];
+    [distractors[i], distractors[j]] = [distractors[j], distractors[i]];
   }
 
-  // Rebuild choices in order: shuffled items, then the pinned E (if any).
+  // Build the final ordered list of items for the shufflable slots.
+  let ordered: { from: ChoiceKey; label: string }[];
+  if (correctItem && targetSlot && shufflable.includes(targetSlot)) {
+    // Insert the correct item at the index of the target slot; distractors fill
+    // the rest in order.
+    const targetIdx = shufflable.indexOf(targetSlot);
+    ordered = [];
+    let di = 0;
+    for (let i = 0; i < shufflable.length; i++) {
+      if (i === targetIdx) ordered.push(correctItem);
+      else ordered.push(distractors[di++]);
+    }
+  } else {
+    // No valid target (or correct is the pinned E): just randomise everything.
+    const all = correctItem ? [correctItem, ...distractors] : distractors;
+    for (let i = all.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [all[i], all[j]] = [all[j], all[i]];
+    }
+    ordered = all;
+  }
+
   const orderKeys = present; // same slots A,B,C,(D),(E)
   const newChoices: Record<string, string> = {};
   let newAnswer: ChoiceKey = q.answer;
   const remap: Partial<Record<ChoiceKey, ChoiceKey>> = {};
-  items.forEach((it, idx) => {
+  ordered.forEach((it, idx) => {
     const slot = orderKeys[idx];
     newChoices[slot] = it.label;
     remap[it.from] = slot; // old letter -> new letter
-    if (it.correct) newAnswer = slot;
+    if (it.from === q.answer) newAnswer = slot;
   });
   if (pinLast) {
+    const lastKey = present[present.length - 1];
     newChoices[lastKey] = q.choices[lastKey]!;
     remap[lastKey] = lastKey; // unchanged
     if (lastKey === q.answer) newAnswer = lastKey;
@@ -396,6 +596,64 @@ function shuffleAnswer(q: Question): Question {
   return next;
 }
 
+// Legacy single-question shuffle: fully random placement. Retained for callers
+// that shuffle one question without set-level balancing.
+function shuffleAnswer(q: Question): Question {
+  return placeAnswer(q, undefined);
+}
+
+// Choose a correct-answer slot for each reorderable question in a batch so that
+// (a) positions are spread as evenly as possible across the available slots,
+// (b) no two CONSECUTIVE questions share the same correct slot, and (c) the
+// first question avoids repeating `prevSlot` (the last correct position from a
+// previous generation, for cross-request continuity).
+//
+// Non-reorderable questions (verbal T/F) and questions whose correct option is
+// a pinned terminal E keep their natural position and still count toward the
+// "previous slot" chain so the no-repeat rule spans them.
+function balanceAnswerPositions(questions: Question[], prevSlot: ChoiceKey | null): Question[] {
+  const counts: Partial<Record<ChoiceKey, number>> = {};
+  let previous: ChoiceKey | null = prevSlot;
+
+  return questions.map((q) => {
+    const allowed = allowedCorrectSlots(q);
+    if (allowed.length === 0) {
+      // Not reorderable: leave as-is, but update the chain using its current
+      // correct position so the next question still avoids repeating it.
+      previous = q.answer;
+      return q;
+    }
+
+    // Rank allowed slots by: least-used so far, then "not equal to previous",
+    // then a random tiebreak. This yields an even spread without a fixed
+    // pattern.
+    const ranked = [...allowed].sort((a, b) => {
+      const ca = counts[a] ?? 0;
+      const cb = counts[b] ?? 0;
+      if (ca !== cb) return ca - cb;
+      const pa = a === previous ? 1 : 0;
+      const pb = b === previous ? 1 : 0;
+      if (pa !== pb) return pa - pb;
+      return Math.random() - 0.5;
+    });
+
+    // Prefer the top-ranked slot that isn't the previous one; fall back to the
+    // top-ranked if every allowed slot equals previous (only possible when a
+    // single slot is allowed).
+    const target = ranked.find((s) => s !== previous) ?? ranked[0];
+
+    counts[target] = (counts[target] ?? 0) + 1;
+    previous = target;
+    return placeAnswer(q, target);
+  });
+}
+
+// Extract the final correct-answer positions of a built set, in order — for
+// recording into the cross-generation history.
+export function correctPositionsOf(questions: Question[]): ChoiceKey[] {
+  return questions.map((q) => q.answer);
+}
+
 // Rewrite standalone option-letter references (A-E) in prose according to the
 // remap. Applied simultaneously (via a single pass with a placeholder) so a
 // chain like A->C, C->A doesn't double-apply. Only matches letters used as
@@ -424,7 +682,24 @@ function remapLetters(text: string, remap: Partial<Record<ChoiceKey, ChoiceKey>>
 }
 
 // Parse an LLM JSON payload expected to be { questions: [...] }.
-export function parseQuestions(rawJson: string, topic: Topic, difficulty: Difficulty = "medium", language: QuestionLanguage = "en"): Question[] {
+// Parse an LLM JSON payload expected to be { questions: [...] }.
+//
+// Options:
+//  - mode: "balance" (default) distributes correct-answer positions evenly
+//    across the batch and avoids consecutive repeats; "shuffle" applies the
+//    legacy per-question random shuffle; "preserve" keeps the LLM's original
+//    option order untouched (used by multi-stage pipelines that balance once at
+//    the end, e.g. generate-then-harden).
+//  - prevSlot: the last correct position from a previous generation, so the
+//    first question in this batch avoids repeating it (cross-request continuity).
+export function parseQuestions(
+  rawJson: string,
+  topic: Topic,
+  difficulty: Difficulty = "medium",
+  language: QuestionLanguage = "en",
+  opts: { mode?: "balance" | "shuffle" | "preserve"; prevSlot?: ChoiceKey | null } = {},
+): Question[] {
+  const { mode = "balance", prevSlot = null } = opts;
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawJson);
@@ -433,10 +708,19 @@ export function parseQuestions(rawJson: string, topic: Topic, difficulty: Diffic
   }
   const container = parsed as { questions?: unknown };
   const arr = Array.isArray(container.questions) ? container.questions : [];
-  return arr
+  const validated = arr
     .map((item) => validateQuestion(item, topic, difficulty, language))
-    .filter((q): q is Question => q !== null)
-    .map(shuffleAnswer);
+    .filter((q): q is Question => q !== null);
+
+  if (mode === "preserve") return validated;
+  if (mode === "shuffle") return validated.map(shuffleAnswer);
+  return balanceAnswerPositions(validated, prevSlot);
+}
+
+// Re-export for the generate route so it can balance ONCE after the optional
+// harden pass (balancing earlier would be undone by harden's re-parse).
+export function balanceQuestionPositions(questions: Question[], prevSlot: ChoiceKey | null): Question[] {
+  return balanceAnswerPositions(questions, prevSlot);
 }
 
 // Per-topic focus hints steer the model toward what the real exam tests.
@@ -531,12 +815,63 @@ export function buildGenerationPrompt(
 
   const difficultyNote = DIFFICULTY_INSTRUCTIONS[difficulty] ?? DIFFICULTY_INSTRUCTIONS.medium;
 
+  // Field AI topics (not verbal T/F) use the scenario-based applied format the
+  // real EPSO field test and prep platforms use: a short professional vignette
+  // then an applied question, plus per-option learn-mode notes.
+  const isFieldTopic = topic !== "verbal";
+
+  // SCENARIO FORMAT: most field items should be a short applied situation, not
+  // a bare definition. This tests whether the candidate can APPLY the knowledge
+  // in an EU-institutional context — the discriminating skill at AD8.
+  const scenarioNote = isFieldTopic
+    ? " SCENARIO FORMAT (critical for realism): Roughly THREE IN FOUR questions" +
+      " must be SCENARIO-BASED — open the stem with a short (2-4 sentence)" +
+      " professional vignette set in a realistic EU-institutional context (an EU" +
+      " agency or Commission DG deploying, procuring, auditing or governing an AI" +
+      " system; a provider preparing a system for the EU market; a policy unit" +
+      " assessing obligations), then ask an APPLIED question such as 'Which" +
+      " obligation applies first?', 'What is the most appropriate next step?'," +
+      " 'How should the team classify this system?', or 'Which action best" +
+      " ensures compliance?'. The remaining ~one in four may be direct" +
+      " conceptual questions for variety. In scenario items the correct answer" +
+      " and every distractor must be a plausible action/classification/" +
+      " conclusion FOR THAT SPECIFIC SITUATION — not a generic definition. Do" +
+      " not pad trivial recall questions with a fake scenario; the scenario must" +
+      " genuinely drive the reasoning."
+    : "";
+
+  // Per-option learn-mode notes for field items: after answering, the app shows
+  // why each option is right/wrong AS APPLIED TO THE SCENARIO. Reuses the same
+  // optionNotes field the verbal-RC format already validates and renders.
+  const optionNotesNote = isFieldTopic
+    ? " PER-OPTION NOTES (required): also output \"optionNotes\", an object keyed" +
+      " by option letter A-D. For each option give {\"verdict\":\"true\"|\"false\"," +
+      " \"note\":string}. Exactly one verdict is \"true\" (the correct answer);" +
+      " the rest \"false\". Each note is ONE sentence that explains the underlying" +
+      " CONCEPT as it applies to THIS scenario — for the correct option why it is" +
+      " the right call here, and for each wrong option which specific concept it" +
+      " misapplies or which obligation/threshold/scope it gets wrong in this" +
+      " situation. These power a per-option learn-mode breakdown."
+    : "";
+
   // Language note: field MCQ is always English (Language 2 in the real EPSO exam).
   // Verbal (T/F) in other languages is supported but field topics stay English.
   const languageNote =
     language !== "en" && topic === "verbal"
       ? ` IMPORTANT: Write the passage, statement, all answer choices, and the explanation entirely in ${language === "pt-PT" ? "European Portuguese (Portugal variant, not Brazilian Portuguese)" : language}.`
       : "";
+
+  // JSON shape differs for field items (they also emit optionNotes).
+  const outputShape = isFieldTopic
+    ? "Output ONLY a JSON object of the form " +
+      '{"questions":[{"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string},' +
+      '"answer":"A"|"B"|"C"|"D","difficulty":"easy"|"medium"|"hard","language":string,"explanation":string,' +
+      '"optionNotes":{"A":{"verdict":"true"|"false","note":string},"B":{...},"C":{...},"D":{...}}' +
+      "}]}. No prose outside the JSON."
+    : "Output ONLY a JSON object of the form " +
+      '{"questions":[{"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string},' +
+      '"answer":"A"|"B"|"C"|"D","difficulty":"easy"|"medium"|"hard","language":string,"explanation":string' +
+      "}]}. No prose outside the JSON.";
 
   const system =
     "You are a senior EPSO competition question author writing for EPSO/AD/430/26 " +
@@ -548,11 +883,10 @@ export function buildGenerationPrompt(
     "the explanation must state why the correct answer is right AND why each " +
     'distractor is wrong. Each question object MUST include a "difficulty" field ' +
     `set to "${difficulty}" and a "language" field set to "${language}". ` +
-    "Output ONLY a JSON object of the form " +
-    '{"questions":[{"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string},' +
-    '"answer":"A"|"B"|"C"|"D","difficulty":"easy"|"medium"|"hard","language":string,"explanation":string' +
-    "}]}. No prose outside the JSON." +
+    outputShape +
     difficultyNote +
+    scenarioNote +
+    optionNotesNote +
     ANTI_TELL_RULES +
     verbalNote +
     languageNote;
@@ -868,7 +1202,11 @@ export function buildCritiquePrompt(
           " Keep each distractor a genuine trap (overreach, scope swap," +
           " belief-as-fact, unstated causal, negation) that closely mirrors the" +
           " passage wording — not an obvious mismatch."
-        : " Keep the same JSON schema the input uses, including the difficulty field.";
+        : " Keep the same JSON schema the input uses, including the difficulty" +
+          " field. If an item has a scenario vignette in the stem, preserve it." +
+          " If an item includes \"optionNotes\", preserve that field: keep one" +
+          " \"true\" verdict (the correct answer) and update each note so it still" +
+          " explains the concept as applied to the scenario.";
 
   const system =
     "You are a strict EPSO exam reviewer. You receive draft multiple-choice " +

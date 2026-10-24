@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import type { Difficulty, QuestionLanguage, Topic } from "@/lib/types";
 import { chatJson, getLlmConfig } from "@/lib/llm";
-import { buildGenerationPrompt, parseQuestions } from "@/lib/questionSchema";
+import { buildGenerationPrompt, parseQuestions, balanceQuestionPositions, correctPositionsOf } from "@/lib/questionSchema";
 import { hardenQuestions } from "@/lib/hardenQuestions";
+import { lastCorrectPosition, recordCorrectPositions } from "@/lib/answerPositionHistory";
 import { SEED_QUESTIONS } from "@/data/questions";
 import { hasValidSession } from "@/lib/auth";
 import { tryConsumeLlmCall } from "@/lib/rateLimit";
@@ -97,7 +98,9 @@ export async function POST(req: Request) {
       ],
       getLlmConfig(byokKey || undefined),
     );
-    const questions = parseQuestions(raw, topic, difficulty, language);
+    // Parse WITHOUT reordering yet: we balance once at the very end so the
+    // optional harden pass (which rewrites option text) can't undo the balance.
+    const questions = parseQuestions(raw, topic, difficulty, language, { mode: "preserve" });
 
     if (questions.length === 0) {
       return NextResponse.json({
@@ -117,6 +120,15 @@ export async function POST(req: Request) {
       );
       hardened = finalQuestions !== questions;
     }
+
+    // Balance correct-answer positions across the final set, seeded by the last
+    // correct position from a previous generation (so single-question requests
+    // don't repeat the same letter run-to-run). Then record for next time.
+    finalQuestions = balanceQuestionPositions(
+      finalQuestions,
+      lastCorrectPosition(topic, language),
+    );
+    recordCorrectPositions(topic, language, correctPositionsOf(finalQuestions));
 
     return NextResponse.json({ questions: finalQuestions, source: "llm", hardened, difficulty, language });
   } catch (err) {
