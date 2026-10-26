@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Difficulty, Question, QuestionLanguage, Topic } from "@/lib/types";
 import { LANGUAGE_LABELS } from "@/lib/types";
 import MockRunner from "@/components/MockRunner";
 import NumericalLearn from "@/components/NumericalLearn";
 import { llmHeaders } from "@/lib/userKey";
+import { clearSession, loadSession, saveSession } from "@/lib/mockSessionStore";
 
 // Topics where Language 1 (pt-PT) is relevant — reasoning tests only.
 // Field MCQ is always English (Language 2 in the real exam).
@@ -20,6 +21,7 @@ export default function MockSession({
 }) {
   const [questions, setQuestions] = useState<Question[]>(seeded);
   const [runKey, setRunKey] = useState(0);
+  const [restored, setRestored] = useState(false);
   const [count, setCount] = useState(5);
   const [articleText, setArticleText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,6 +36,23 @@ export default function MockSession({
   );
 
   const isReasoning = REASONING_TOPICS.has(topic);
+
+  // Restore a previously generated (or in-progress) session on mount so a
+  // refresh or back-navigation doesn't wipe the generated questions/answers.
+  // Done in an effect (not during render) to avoid an SSR hydration mismatch —
+  // the first client render matches the server (seeded), then we swap in the
+  // persisted set. `restored` gates the save-effect so we don't overwrite the
+  // stored run with the seeded default before restoration has happened.
+  useEffect(() => {
+    const persisted = loadSession(topic);
+    if (persisted) {
+      setQuestions(persisted.questions);
+      setNotice(persisted.notice);
+      setRunKey((k) => k + 1); // remount runner so it picks up its own saved run
+    }
+    setRestored(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic]);
 
   async function generate() {
     setLoading(true);
@@ -66,13 +85,16 @@ export default function MockSession({
       if (data.questions && data.questions.length > 0) {
         setQuestions(data.questions);
         setRunKey((k) => k + 1);
-        setNotice(
+        const msg =
           data.source === "fallback"
             ? `Showing seeded questions (${data.reason ?? "LLM unavailable"}).`
             : `Generated ${data.questions.length} fresh questions${
                 data.hardened ? " (hardened)" : ""
-              }.`,
-        );
+              }.`;
+        setNotice(msg);
+        // Persist the fresh set so a refresh / back-navigation keeps it. A new
+        // set starts with no run progress (the runner saves its own as it goes).
+        saveSession({ topic, questions: data.questions, notice: msg });
       } else {
         setNotice("No questions returned.");
       }
@@ -87,6 +109,8 @@ export default function MockSession({
     setQuestions(seeded);
     setRunKey((k) => k + 1);
     setNotice(null);
+    // Drop any persisted generated set / run progress for this topic.
+    clearSession(topic);
   }
 
   return (

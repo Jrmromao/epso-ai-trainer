@@ -19,6 +19,7 @@ import Calculator from "@/components/Calculator";
 import QuestionTableView from "@/components/QuestionTableView";
 import QuestionTimer from "@/components/QuestionTimer";
 import { budgetForTopic } from "@/lib/timing";
+import { clearSession, loadSession, saveRunProgress } from "@/lib/mockSessionStore";
 
 function sessionSecondsForTopic(topic: Topic, count: number): number {
   return budgetForTopic(topic) * count;
@@ -82,13 +83,26 @@ export default function MockRunner({
   const totalSessionSeconds = sessionSecondsForTopic(topic, questions.length);
   const perQSeconds = budgetForTopic(topic);
 
-  const [index, setIndex] = useState(0);
-  const [chosen, setChosen] = useState<ChoiceKey | null>(null);
-  const [revealed, setRevealed] = useState(false);
-  const [records, setRecords] = useState<AnswerRecord[]>([]);
-  const [sessionLeft, setSessionLeft] = useState(totalSessionSeconds);
+  // Restore any saved run progress for this topic so a refresh / back-navigation
+  // mid-test keeps the user's answers and position. We only trust the saved run
+  // if it matches the current question set (same ids, same order) — otherwise a
+  // freshly generated set would inherit stale progress. Read once at mount.
+  const savedRun = (() => {
+    const persisted = loadSession(topic);
+    if (!persisted?.run) return null;
+    const sameSet =
+      persisted.questions.length === questions.length &&
+      persisted.questions.every((q, i) => q.id === questions[i]?.id);
+    return sameSet ? persisted.run : null;
+  })();
+
+  const [index, setIndex] = useState(savedRun?.index ?? 0);
+  const [chosen, setChosen] = useState<ChoiceKey | null>(savedRun?.chosen ?? null);
+  const [revealed, setRevealed] = useState(savedRun?.revealed ?? false);
+  const [records, setRecords] = useState<AnswerRecord[]>(savedRun?.records ?? []);
+  const [sessionLeft, setSessionLeft] = useState(savedRun?.sessionLeft ?? totalSessionSeconds);
   const [secondsLeft, setSecondsLeft] = useState(perQSeconds);
-  const [finished, setFinished] = useState(false);
+  const [finished, setFinished] = useState(savedRun?.finished ?? false);
   const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
   const [assessing, setAssessing] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
@@ -101,6 +115,15 @@ export default function MockRunner({
   const { saveReview } = useTestReview();
 
   const current = questions[index];
+
+  // Persist run progress on every meaningful state change so a refresh / back
+  // keeps the user's place and answers. Skipped once finished — the finish
+  // effect clears the session after recording it to history.
+  useEffect(() => {
+    if (finished) return;
+    saveRunProgress(topic, { index, records, chosen, revealed, finished, sessionLeft });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, records, chosen, revealed, sessionLeft, finished, topic]);
 
   // Load flag state when question changes
   useEffect(() => {
@@ -161,6 +184,10 @@ export default function MockRunner({
     recordRun(topic, records);
     recordProgress(records);
     saveReview(TOPIC_LABELS[topic], questions, records).then(setReviewId);
+    // The run is now recorded to history/review — drop the in-progress
+    // sessionStorage copy so a later refresh starts clean rather than
+    // reopening a completed test.
+    clearSession(topic);
     setAssessing(true);
     fetch("/api/assess", {
       method: "POST",
