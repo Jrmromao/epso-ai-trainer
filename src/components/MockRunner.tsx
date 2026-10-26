@@ -18,6 +18,7 @@ import { llmHeaders } from "@/lib/userKey";
 import Calculator from "@/components/Calculator";
 import QuestionTableView from "@/components/QuestionTableView";
 import QuestionTimer from "@/components/QuestionTimer";
+import PerformanceByTopic from "@/components/PerformanceByTopic";
 import { budgetForTopic } from "@/lib/timing";
 import { clearSession, loadSession, saveRunProgress } from "@/lib/mockSessionStore";
 
@@ -216,6 +217,7 @@ export default function MockRunner({
         <h2 className="text-xl font-semibold">
           Score: {correct}/{records.length}
         </h2>
+        <PerformanceByTopic records={records} />
         {assessing && (
           <p className="mt-3 text-sm text-neutral-500">Analysing your answers…</p>
         )}

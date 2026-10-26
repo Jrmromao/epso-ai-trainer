@@ -242,13 +242,35 @@ export default function ReasoningExamRunner() {
       <div className="mt-6">
         <h2 className="text-2xl font-bold">Reasoning mock complete</h2>
         <p className="mt-1 text-neutral-600">Overall: {totalCorrect}/40</p>
-        <div className="mt-4 space-y-2">
-          {SECTION_ORDER.map((s, i) => (
-            <div key={s} className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3">
-              <span className="font-medium">{SECTION_LABEL[s]}</span>
-              <span className="font-semibold tabular-nums">{[vScore, nScore, aScore][i]}/{maxOf[i]}</span>
-            </div>
-          ))}
+        <div className="mt-4 space-y-3">
+          {SECTION_ORDER.map((s, i) => {
+            const score = [vScore, nScore, aScore][i];
+            const max = maxOf[i];
+            const pct = max > 0 ? Math.round((score / max) * 100) : 0;
+            // Color bands: red <50, amber 50-74, green >=75.
+            const bar = pct < 50 ? "bg-red-500" : pct < 75 ? "bg-amber-500" : "bg-green-500";
+            const txt = pct < 50 ? "text-red-700" : pct < 75 ? "text-amber-700" : "text-green-700";
+            return (
+              <div key={s} className="rounded-lg border border-neutral-200 bg-white p-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">{SECTION_LABEL[s]}</span>
+                  <span className={`font-semibold tabular-nums ${txt}`}>
+                    {pct}% <span className="font-normal text-neutral-500">({score}/{max})</span>
+                  </span>
+                </div>
+                <div
+                  className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-neutral-100"
+                  role="progressbar"
+                  aria-valuenow={pct}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${SECTION_LABEL[s]}: ${pct}% correct`}
+                >
+                  <div className={`h-full rounded-full transition-all ${bar}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
         <div className="mt-3 space-y-2">
           <div className={`rounded-lg border p-3 text-sm ${verbalPass ? "border-green-300 bg-green-50 text-green-900" : "border-red-300 bg-red-50 text-red-900"}`}>
