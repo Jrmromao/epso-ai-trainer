@@ -96,6 +96,17 @@ function parseLanguage(raw: unknown, requested: QuestionLanguage): QuestionLangu
 // 19.33 or 19330; "3,466" could be 3.466 or 3466). Matching then succeeds if
 // ANY interpretation of the option matches ANY interpretation of the target —
 // this is deliberately lenient so we don't wrongly reject a correct item.
+// A bare EPSO ratio option ("3/2", "1/3") is one value, the quotient.
+// Limited to 1-2 digit parts so a worked division of real figures
+// ("148620/160") is not treated as a simplified fraction.
+function pureFractionValue(s: string): number | null {
+  const m = s.trim().match(/^([+-]?\d{1,2})\s*\/\s*(\d{1,2})$/);
+  if (!m) return null;
+  const den = Number(m[2]);
+  if (!den) return null;
+  return Number(m[1]) / den;
+}
+
 // Returns [] if no number present (e.g. "Cannot be determined").
 function parseNumericCandidates(s: string): number[] {
   if (typeof s !== "string") return [];
@@ -105,6 +116,8 @@ function parseNumericCandidates(s: string): number[] {
     .replace(/[\u2212\u2013\u2014]/g, "-")
     .replace(/[€$£%]/g, " ")
     .trim();
+  const asFraction = pureFractionValue(cleaned);
+  if (asFraction !== null) return [asFraction];
   const m = cleaned.match(/[-+]?\d[\d.,\s]*\d|[-+]?\d/);
   if (!m) return [];
   const raw = m[0].replace(/\s/g, "");
@@ -139,6 +152,13 @@ function parseNumericCandidates(s: string): number[] {
 function finalCandidatesFromWorkedSolution(ws: string): number[] {
   if (typeof ws !== "string") return [];
   const norm = ws.replace(/[\u2212\u2013\u2014]/g, "-");
+  // Type 1 items end on the simplified fraction ("... = 3/2"). Read that
+  // quotient so it matches an option whose text is "3/2".
+  const trailingFraction = norm.match(/([+-]?\d{1,2})\s*\/\s*(\d{1,2})\s*\.?\s*$/);
+  if (trailingFraction) {
+    const den = Number(trailingFraction[2]);
+    if (den) return [Number(trailingFraction[1]) / den];
+  }
   const matches = norm.match(/[-+]?\d[\d.,\s]*\d|[-+]?\d/g);
   if (!matches || matches.length === 0) return [];
   return parseNumericCandidates(matches[matches.length - 1]);
@@ -195,6 +215,8 @@ function parseStrictNumber(token: string): number | null {
 // value (see parseStrictNumber). Used only for compound-answer validation.
 function strictNumericTokens(s: string): number[] {
   if (typeof s !== "string") return [];
+  const asFraction = pureFractionValue(s);
+  if (asFraction !== null) return [asFraction];
   const norm = s.replace(/[\u2212\u2013\u2014]/g, "-");
   const matches = norm.match(/[-+]?\d[\d.,\s]*\d|[-+]?\d/g);
   if (!matches) return [];
@@ -843,9 +865,9 @@ export function buildGenerationPrompt(
     return buildReadingComprehensionPrompt(count, difficulty, language);
   }
 
-  // Numerical reasoning is a distinct EPSO format: a DATA TABLE + a question
-  // that requires calculation + FIVE options (A-E) where E is "None of the
-  // above". It does not use the AI-specialist persona.
+  // Numerical reasoning is a distinct EPSO format: one shared statistical
+  // table and five options (A-E), with E fixed as "Cannot be determined".
+  // It does not use the AI-specialist persona or the four-option anti-tell rules.
   if (topic === "numerical") {
     return buildNumericalPrompt(count, difficulty, language);
   }
@@ -1095,141 +1117,147 @@ function buildReadingComprehensionPrompt(count: number, difficulty: Difficulty =
   return { system, user };
 }
 
-// EPSO Numerical Reasoning format.
-// Modelled on real EPSO items (e.g. EN4769PN): a DATA TABLE of figures, a
-// question that requires a calculation off that table, and FIVE options (A-E)
-// where E is always "None of the above". A calculator is provided in the real
-// test, so the numbers can be non-trivial. Each item also carries a worked
-// solution and an ordered step breakdown for the untimed learn-mode.
+// EPSO Numerical Reasoning format (AD administrator exam).
+// One Eurostat-style table is shared by a set of questions. Every item has
+// five options. E is always the fixed label "Cannot be determined"
+// (pt-PT: "Impossível responder") and is the correct answer ONLY when a
+// required base figure is missing (Type 3) — not when the computed value was
+// merely left off the list. A calculator is allowed, so figures are real-scale.
 function buildNumericalPrompt(count: number, difficulty: Difficulty = "medium", language: QuestionLanguage = "en"): { system: string; user: string } {
-  // Difficulty modulates calculation complexity and how close the distractors
-  // are to the correct numeric answer.
-  const difficultyNote =
-    difficulty === "easy"
-      ? " DIFFICULTY: EASY. Use simple tables (2-3 columns, 2-3 rows). The required" +
-        " calculation should be a single step (direct percentage, simple ratio, or" +
-        " straightforward difference). Distractors should be plausible but clearly" +
-        " wrong (wrong column, off by a factor of 10)."
-      : difficulty === "hard"
-        ? " DIFFICULTY: HARD. Use denser tables (3-5 columns, 3-5 rows) with multiple" +
-          " related figures. The calculation must require at least 3 steps (e.g." +
-          " compound growth + per-capita adjustment, or multi-year change in a" +
-          " share). Distractors must be the results of plausible multi-step errors" +
-          " (applying the wrong base, forgetting to convert units, rounding at the" +
-          " wrong step) and should be numerically close to the correct answer."
-        : " DIFFICULTY: MEDIUM. Use tables with 3-4 columns and 3-4 rows. The" +
-          " calculation should require 2-3 steps. Distractors should be the results" +
-          " of common single-step mistakes (wrong base year, forgetting population" +
-          " adjustment).";
-
-  const languageNote =
-    language !== "en"
-      ? ` IMPORTANT: Write the table caption, column headers, stem, all answer options, explanation, workedSolution, and steps entirely in ${language === "pt-PT" ? "European Portuguese (Portugal variant — not Brazilian Portuguese). Use European Portuguese vocabulary, spelling (post-2009 Acordo Ortográfico), and phrasing. Keep numeric values as numbers." : language}.`
-      : "";
-
-  // Option E label depends on language — matches the real TAO interface.
   const optionE = language === "pt-PT" ? "Impossível responder" : "Cannot be determined";
 
-  const tableNote =
-    "TABLE DESIGN (critical — match real EPSO format): Use a realistic multi-column " +
-    "table modelled on EU statistical publications (Eurostat, OECD) with 4-7 columns " +
-    "and 3-6 rows. Mix column types: a year-pair (e.g. 2000 / 2003), a percentage " +
-    "column, an absolute-value column (millions EUR, thousands of people, GWh), " +
-    "optionally a per-capita column. Row labels are countries/regions/sectors. " +
-    "Not every value needs to be used (include decoys), and the question should " +
-    "require DERIVING a value (ratio, compound growth, share of total, per-capita) " +
-    "rather than reading a single cell directly. At least one question per batch " +
-    "should have E as the correct answer.";
+  const difficultyNote =
+    difficulty === "easy"
+      ? " DIFFICULTY: EASY. Keep the same table shape. Use one-decimal figures " +
+        "that divide cleanly. Distractors are the classic mistakes (inverted ratio, " +
+        "wrong year, stopping one step early) and should sit well clear of the " +
+        "correct value."
+      : difficulty === "hard"
+        ? " DIFFICULTY: HARD. Use non-round figures that need a calculator. Type 2 " +
+          "must apply every factor in the three-step chain, including the public " +
+          "share. At least one table must carry a thousands-vs-millions header so " +
+          "ignoring the unit is a real distractor. Wrong options are the exact " +
+          "result of one missed step, near enough to tempt, but still separated " +
+          "from the correct value (see SEPARATION)."
+        : " DIFFICULTY: MEDIUM. Use non-round real-scale figures. Type 2 uses the " +
+          "full three-step chain. Distractors are one structural mistake each.";
 
-  // Realistic figures: real EPSO tables use large real-world numbers with
-  // explicit units, and exploit unit confusion. Toy round numbers feel fake.
-  const figuresNote =
-    "REALISTIC FIGURES (critical): Use large, real-world-scale numbers, not toy " +
-    "round values. Populations in millions (e.g. 10.4, 83.2), monetary values in " +
-    "millions or billions of EUR, counts in thousands. Put the unit in the column " +
-    "header or caption (e.g. 'População (milhares)', 'PIB (milhões EUR)', 'Despesa " +
-    "(mil milhões EUR)'). Use decimals and non-round numbers (e.g. 19 330, 2.47, " +
-    "148.6) so the calculation requires a calculator — a calculator is provided in " +
-    "the real exam. At least one table should use a 'thousands' or 'millions' unit " +
-    "where a candidate who ignores the unit header would get a wrong answer.";
+  const languageNote =
+    language === "pt-PT"
+      ? " Write the caption, headers, stem, explanation, workedSolution, and steps " +
+        "entirely in European Portuguese (Portugal, post-2009 Acordo Ortográfico — " +
+        "not Brazilian Portuguese). Decimal comma, thousands separated by a space " +
+        "(19 330 and 1,97). Fraction options stay as 3/2."
+      : " Decimal point, thousands separated by a space (19 330 and 1.97).";
 
-  // The four distractors A-D should each encode a NAMED, predictable mistake
-  // that real candidates make — this is what separates a realistic item from a
-  // random-numbers item.
-  const distractorNote =
-    "DISTRACTOR DESIGN (critical — each wrong option must encode a NAMED mistake): " +
-    "The three incorrect numeric options (and E when E is wrong) must each be the " +
-    "result of ONE specific, predictable error, NOT a random number. Use a mix of:\n" +
-    "- WRONG BASELINE: percentage change divided by the NEW value instead of the " +
-    "original (e.g. change ÷ new instead of change ÷ old).\n" +
-    "- PERCENTAGE-POINTS vs PERCENT CHANGE: subtracting two percentages directly " +
-    "(giving percentage points) when a relative percentage change was asked, or " +
-    "vice versa.\n" +
-    "- INCREASE BY vs INCREASE TO: an option that gives the final value when the " +
-    "change was asked, or the change when the final value was asked.\n" +
-    "- INVERTED RATIO: the correct ratio flipped (b:a instead of a:b).\n" +
-    "- UNIT ERROR: an answer off by a factor of 10/100/1000 from ignoring a " +
-    "'thousands'/'millions' column header.\n" +
-    "SEPARATION RULE (critical — avoids ambiguous items): every option must be " +
-    "clearly distinguishable from the correct answer and from every other option. " +
-    "Do NOT create a distractor that differs from the correct answer only by a " +
-    "rounding choice (e.g. 10,6% vs 10,63%) or that rounds to within 0,3 " +
-    "percentage points / 1% relative of the correct value. Each distractor must " +
-    "come from a DIFFERENT structural error that yields a numerically DISTINCT " +
-    "result — not a near-miss of the same calculation. If a percentage-points " +
-    "distractor and the correct percentage-change answer would round to values " +
-    "closer than ~0,5 apart, pick different base figures so they separate cleanly.\n" +
-    "In the \"explanation\", name which trap each wrong option corresponds to. " +
-    "The correct answer must come from using the ORIGINAL value as the baseline, " +
-    "keeping full precision until the final step, and respecting the stated units.";
-
-  // Multi-step requirement — real EPSO rarely tests a single operation.
-  const multiStepNote =
-    "MULTI-STEP REQUIREMENT: For medium and hard items the candidate must combine " +
-    "AT LEAST TWO data items and TWO operations — for example, compute a percentage " +
-    "change for one row, then express it as a ratio against another row; or derive " +
-    "a total from a per-unit value and a count, then take a share of it. A single " +
-    "read-and-divide is only acceptable for easy items.";
+  // Full sets are Type 1-4 on one table. A short tail keeps that order so a
+  // one-question drill is a real calculation, not only the missing-data trap.
+  const fullSets = Math.floor(count / 4);
+  const remainder = count % 4;
+  const typeNames = ["Type 1", "Type 2", "Type 3", "Type 4"];
+  const setsWord = fullSets === 1 ? "set" : "sets";
+  let batchPlan: string;
+  if (fullSets === 0) {
+    batchPlan =
+      `This batch is ${count} ${count === 1 ? "question" : "questions"} on ONE shared table, in this order: ` +
+      `${typeNames.slice(0, count).join(", ")}.`;
+  } else if (remainder === 0) {
+    batchPlan =
+      `This batch is ${fullSets} ${setsWord} of 4 questions. Each set has its own table. ` +
+      "Within a set the order is Type 1, Type 2, Type 3, Type 4.";
+  } else {
+    batchPlan =
+      `This batch is ${fullSets} full ${setsWord} of 4, then a final short set of ` +
+      `${remainder} (${typeNames.slice(0, remainder).join(", ")}). Each set has its own table. ` +
+      "Within a full set the order is Type 1, Type 2, Type 3, Type 4.";
+  }
 
   const system =
-    "You are a senior EPSO test author writing NUMERICAL REASONING items for an " +
-    "EU competition. Each item MUST have:\n" +
-    "1) A \"table\" object: {\"caption\":string,\"headers\":string[]," +
-    "\"rows\":string[][]} — see TABLE DESIGN below. Every row must have the same " +
-    "number of cells as there are headers.\n" +
-    "2) A \"stem\": a question requiring a multi-step calculation FROM the table " +
-    "(ratio, compound growth %, per-capita, share of total, derived index). " +
-    "Do not restate the whole table in the stem. Ask one precise question.\n" +
-    "3) FIVE options A-E. Options A-D are numeric or ratio candidates; option E " +
-    `MUST be exactly "${optionE}". Exactly one option is correct — E is correct ` +
-    "when the exact answer does not match any of A-D.\n" +
-    "4) \"answer\": the correct letter A-E.\n" +
-    "5) \"explanation\": why the answer is correct, with the key calculation shown.\n" +
-    "6) \"workedSolution\": the full step-by-step calculation as one string.\n" +
-    "7) \"steps\": an ordered array of short discrete calculation steps for " +
-    "step-by-step reveal in learn mode.\n" +
-    '8) "difficulty": set to "' + difficulty + '".\n' +
-    '9) "language": set to "' + language + '".\n\n' +
-    tableNote + "\n\n" +
-    figuresNote + "\n\n" +
-    distractorNote + "\n\n" +
-    multiStepNote + "\n\n" +
-    "Output ONLY a JSON object of the form " +
+    "You are an official EPSO test developer writing NUMERICAL REASONING items " +
+    "for the Administrator (AD) exam. Candidates have a calculator and about " +
+    "two minutes per question. Output ONLY JSON, no prose.\n\n" +
+    "TABLE (one per set, copied identically onto every question in that set):\n" +
+    "- Exactly 5 rows, one country or region each.\n" +
+    "- headers[0] is the country label. Then 4 to 6 DATA columns, so " +
+    "headers.length is 5, 6, or 7. Every row has that same length.\n" +
+    "- Mix units. Include all of: at least two percentage columns " +
+    "(R&D as % of GDP, % of R&D publicly funded, or % urban population); " +
+    "at least one absolute column in millions of EUR; at least one per-capita " +
+    "or per-million column (GDP per capita in EUR, or patents per million inhabitants).\n" +
+    "- Two time points on at least two indicators (for example 2000 and 2003, " +
+    "or 2015 and 2020).\n" +
+    "- Model the table on a Eurostat or OECD extract. Include a decoy column " +
+    "the questions do not need. Do not use toy round numbers.\n" +
+    "- Different sets use different themes: R&D expenditure, demographics, " +
+    "energy, trade, public health, transport.\n\n" +
+    "THE FOUR QUESTION TYPES. Follow them exactly. The stem asks one precise " +
+    "question and does not restate the table. A growth rate that the table does " +
+    "not contain is given in the stem only for Type 2.\n" +
+    "Type 1 — Reverse percentage, then a ratio of two countries. " +
+    "Total base = absolute expenditure ÷ (% of base). " +
+    "Ratio = total base of country A ÷ total base of country B. " +
+    "Options A-D are ONLY simplified fractions such as 1/3, 2/3, 3/2, 3/1. " +
+    "No words, no decimals in A-D.\n" +
+    "Type 2 — A growth rate supplied in the stem, then a 3-step compound value. " +
+    "Example stem: \"Given that country X's GDP grew by 4% between 2000 and 2003...\". " +
+    "Steps: (1) base in the first year = expenditure ÷ % of base; " +
+    "(2) base in the later year = base × (1 + growth); " +
+    "(3) target = later base × later % of base × later public share " +
+    "(drop the public-share factor only if that column does not exist). " +
+    "Ask for the new absolute expenditure or the public share in the target year. " +
+    "Options A-D are four plain numbers (millions of EUR, or a percentage) from " +
+    "structural mistakes, close enough that a skipped step looks plausible.\n" +
+    "Type 3 — Missing-variable trap. Ask for an absolute change in EUR or in " +
+    "number of people between the two years. The table has only percentages for " +
+    "both years, and the stem does NOT give the growth of the base (GDP or " +
+    "population). The absolute change cannot be computed. " +
+    `The correct answer MUST be E, "${optionE}".\n` +
+    "Type 4 — Speed check. One step only: add, subtract, or multiply two values " +
+    "that are both printed in the table. Options A-D are plain numbers.\n\n" +
+    "CHOICES.\n" +
+    `- Always five options. E is exactly "${optionE}" on every question, with no ` +
+    "extra words. A-D are the numeric or fraction candidates.\n" +
+    "- E is correct only for Type 3, because a required input is missing. " +
+    "For Types 1, 2, and 4 the data is sufficient, the correct value is one of " +
+    "A-D, and E is a wrong option. Do not hide the true number and call it " +
+    `"${optionE}".\n` +
+    "- Randomise which of A-D is correct on Types 1, 2, and 4.\n" +
+    "- Each wrong numeric option is the result of ONE named mistake, not a " +
+    "random figure: inverted ratio (2/3 when the answer is 3/2); the other " +
+    "year's percentage; stopping before the last percentage step (reporting " +
+    "total GDP instead of public R&D, or the base instead of the expenditure).\n" +
+    "- SEPARATION: options must not be a rounding coin-flip. Keep them more " +
+    "than 0.5 percentage points apart, and more than about 2% apart relative " +
+    "to each other for large euro amounts. If two mistakes would land too " +
+    "close, change the table figures.\n\n" +
+    "WORKED SOLUTION (the answer key is checked against it):\n" +
+    "- Types 1, 2, and 4: show the arithmetic. The last token of workedSolution " +
+    "must be the correct option's value. For Type 1 that token is the fraction " +
+    "itself (example: the string ends with 3/2). For Types 2 and 4 it is the " +
+    "same number printed in the correct option.\n" +
+    "- Type 3: do not compute a result and do not write any digit. Name the " +
+    "missing input (the base growth rate, or the population). The figures in " +
+    "A-D must not appear in the worked solution.\n" +
+    "- Do not write \"the answer is\" followed by a letter anywhere except to " +
+    "name the one correct letter. Never name a different letter.\n" +
+    "- explanation: the correct calculation, and the trap name for each wrong option.\n" +
+    "- steps: an ordered array of short calculation steps for learn mode. " +
+    "For Type 3, steps state only which input is missing.\n\n" +
+    `Every object has "difficulty" "${difficulty}" and "language" "${language}".\n` +
+    "Output ONLY " +
     '{"questions":[{"table":{"caption":string,"headers":string[],"rows":string[][]},' +
     '"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string,"E":string},' +
     '"answer":"A"|"B"|"C"|"D"|"E","difficulty":"easy"|"medium"|"hard","language":string,' +
     '"explanation":string,"workedSolution":string,"steps":string[]}]}. ' +
     "No prose outside the JSON." +
     difficultyNote +
-    ANTI_TELL_RULES +
     languageNote;
 
   const user =
-    `Generate ${count} ${difficulty}-difficulty EPSO numerical reasoning questions, each based on its own ` +
-    "multi-column data table. Vary the scenarios (R&D expenditure, demographics, " +
-    "energy production, trade statistics, public health, transport). " +
-    `Make E ("${optionE}") the correct answer for at least one question. ` +
-    "Randomise which option letter is correct across the set.";
+    `Generate exactly ${count} ${difficulty}-difficulty EPSO numerical reasoning ` +
+    `${count === 1 ? "question" : "questions"}. ${batchPlan} Copy the identical table object onto every question ` +
+    `that shares it. Option E is "${optionE}" on every question. Only Type 3 is ` +
+    "keyed to E.";
 
   return { system, user };
 }
@@ -1242,23 +1270,42 @@ export function buildCritiquePrompt(
   topic: Topic,
   questionsJson: string,
 ): { system: string; user: string } {
+  if (topic === "numerical") {
+    const system =
+      "You are a strict EPSO numerical-reasoning reviewer. You receive draft " +
+      "items and you may only tighten weak numeric distractors. Do not change " +
+      "the table, the stem's question, the correct letter, the difficulty, or " +
+      "the language. Option E must stay exactly \"Cannot be determined\" or " +
+      "\"Impossível responder\" — never rewrite it into a sentence or a number. " +
+      "If the keyed answer is that E option, the item is a missing-data trap: " +
+      "do not invent the missing growth rate or population, and do not move the " +
+      "key onto a numeric option. A numeric distractor that is a random figure " +
+      "may be replaced with the result of one mistake: an inverted ratio, the " +
+      "other year's percentage, or stopping before the final percentage step. " +
+      "Keep each distractor more than 0.5 percentage points away from the " +
+      "correct value, and more than about 2% away for large euro amounts. " +
+      "The last token of workedSolution must still equal the keyed option " +
+      "(a fraction such as 3/2 for a ratio item). Return the same number of " +
+      "questions. Output ONLY the revised JSON ({\"questions\":[...]}), no prose.";
+    const user =
+      "Review these numerical items. Return the same number of questions in " +
+      "the same JSON schema:\n\n" +
+      questionsJson;
+    return { system, user };
+  }
+
   const preserve =
-    topic === "numerical"
-      ? " Preserve every field exactly (table, workedSolution, steps, the five" +
-        " options A-E including E, and the difficulty field). Keep the same JSON schema the input uses." +
-        " Distractors must be results of plausible calculation mistakes, close" +
-        " enough to the correct value to be tempting."
-      : topic === "verbal-rc"
-        ? " Preserve the passage + question line in the stem and the four options." +
-          " Keep the difficulty field unchanged." +
-          " Keep each distractor a genuine trap (overreach, scope swap," +
-          " belief-as-fact, unstated causal, negation) that closely mirrors the" +
-          " passage wording — not an obvious mismatch."
-        : " Keep the same JSON schema the input uses, including the difficulty" +
-          " field. If an item has a scenario vignette in the stem, preserve it." +
-          " If an item includes \"optionNotes\", preserve that field: keep one" +
-          " \"true\" verdict (the correct answer) and update each note so it still" +
-          " explains the concept as applied to the scenario.";
+    topic === "verbal-rc"
+      ? " Preserve the passage + question line in the stem and the four options." +
+        " Keep the difficulty field unchanged." +
+        " Keep each distractor a genuine trap (overreach, scope swap," +
+        " belief-as-fact, unstated causal, negation) that closely mirrors the" +
+        " passage wording — not an obvious mismatch."
+      : " Keep the same JSON schema the input uses, including the difficulty" +
+        " field. If an item has a scenario vignette in the stem, preserve it." +
+        " If an item includes \"optionNotes\", preserve that field: keep one" +
+        " \"true\" verdict (the correct answer) and update each note so it still" +
+        " explains the concept as applied to the scenario.";
 
   const system =
     "You are a strict EPSO exam reviewer. You receive draft multiple-choice " +

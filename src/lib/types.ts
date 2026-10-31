@@ -26,9 +26,9 @@ export const TOPIC_LABELS: Record<Topic, string> = {
 };
 
 // Field-knowledge + verbal questions: single-best-answer MCQ.
-// EPSO numerical reasoning uses FIVE options (A-E) with "None of the above" as
-// E; other formats use four (A-D). E is therefore OPTIONAL: A-D are always
-// present, E only when the question has a fifth option.
+// EPSO numerical reasoning uses FIVE options (A-E). E is "Cannot be determined"
+// (pt-PT: "Impossível responder"). Other formats use four (A-D). E is therefore
+// OPTIONAL: A-D are always present, E only when the question has a fifth option.
 export type ChoiceKey = "A" | "B" | "C" | "D" | "E";
 
 export interface Choices {

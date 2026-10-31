@@ -67,5 +67,43 @@ const single = {
 const r4 = validateQuestion(single, "numerical", "hard", "pt-PT");
 check("valid single-value item survives", r4 === null ? "NULL" : "KEPT", "KEPT");
 
+// 5) Type 1 ratio: option text is the fraction, worked solution ends on it.
+const ratio = {
+  stem: "In 2015, what was the approximate ratio of Sweden's GDP to Spain's GDP?",
+  table: {
+    caption: "R&D",
+    headers: ["Country", "R&D (million EUR) 2015", "R&D (% of GDP) 2015"],
+    rows: [["Sweden", "14800", "3.26"], ["Spain", "13250", "1.22"]],
+  },
+  choices: { A: "1/3", B: "2/3", C: "3/2", D: "3/1", E: "Cannot be determined" },
+  answer: "B",
+  explanation: "Sweden base = 14800/0.0326; Spain base = 13250/0.0122; ratio ≈ 2/3.",
+  workedSolution: "Sweden GDP = 14800 / 0.0326 ≈ 454000. Spain GDP = 13250 / 0.0122 ≈ 1086000. Ratio ≈ 454000 / 1086000 ≈ 2/3",
+  difficulty: "medium",
+  language: "en",
+};
+const r5 = validateQuestion(ratio, "numerical", "medium", "en");
+check("fraction ratio item survives", r5 === null ? "NULL" : "KEPT", "KEPT");
+check("fraction ratio stays keyed to B", r5 && r5.answer, "B");
+
+// 6) Type 3: no digits in the solution, E is the missing-data answer.
+const missing = {
+  stem: "By how many million EUR did Italy's R&D expenditure change between 2015 and 2018?",
+  table: {
+    caption: "R&D",
+    headers: ["Country", "R&D (% of GDP) 2015", "R&D (% of GDP) 2018"],
+    rows: [["Italy", "1.34", "1.39"]],
+  },
+  choices: { A: "1200", B: "2400", C: "3600", D: "4800", E: "Cannot be determined" },
+  answer: "E",
+  explanation: "Only the percentage of GDP is given. GDP growth is not given, so the absolute change cannot be computed.",
+  workedSolution: "The table gives only the share of GDP in each year. The growth of GDP is not provided, so the absolute change cannot be determined.",
+  difficulty: "medium",
+  language: "en",
+};
+const r6 = validateQuestion(missing, "numerical", "medium", "en");
+check("missing-data item survives", r6 === null ? "NULL" : "KEPT", "KEPT");
+check("missing-data stays keyed to E", r6 && r6.answer, "E");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
