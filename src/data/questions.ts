@@ -403,7 +403,7 @@ export const SEED_QUESTIONS: Question[] = [
       B: "6.8%",
       C: "7.9%",
       D: "9.1%",
-      E: "None of the above",
+      E: "Cannot be determined",
     },
     answer: "B",
     explanation:
@@ -432,17 +432,17 @@ export const SEED_QUESTIONS: Question[] = [
       ],
     },
     stem:
-      "If Belgium's GDP per head increased by 3% between 2000 and 2003, and R&D spending is the stated percentage of GDP, by approximately how much did Belgium's per-head R&D spend change over the period?",
+      "If Belgium's GDP per head increased by 3% between 2000 and 2003, and R&D spending is the stated percentage of GDP, by approximately what percentage did Belgium's per-head R&D spend change over the period? (A negative value is a fall.)",
     choices: {
-      A: "It fell by about 1.2%",
-      B: "It rose by about 1.2%",
-      C: "It rose by about 3.0%",
-      D: "It fell by about 4.1%",
-      E: "None of the above",
+      A: "−1.2%",
+      B: "+1.2%",
+      C: "+3.0%",
+      D: "−4.1%",
+      E: "Cannot be determined",
     },
     answer: "A",
     explanation:
-      "Per-head R&D = GDP per head × R&D%. 2000: 19330 × 1.97% = 380.8. 2003: (19330 × 1.03) × 1.89% = 19910 × 1.89% = 376.3. Change = 376.3/380.8 − 1 ≈ −1.2%, a small fall (A). The R&D-share drop (1.97→1.89) outweighs the 3% GDP rise.",
+      "Per-head R&D = GDP per head × R&D%. 2000: 19330 × 1.97% = 380.8. 2003: (19330 × 1.03) × 1.89% = 19910 × 1.89% = 376.3. Change = 376.3/380.8 − 1 ≈ −1.2% (A), a small fall. The R&D-share drop (1.97→1.89) outweighs the 3% GDP rise. B flips the sign; C ignores the share change and reports GDP growth; D over-weights the share drop.",
     workedSolution:
       "2000 per-head R&D = 19330 × 0.0197 = 380.8. 2003 GDP/head = 19330 × 1.03 = 19910. 2003 per-head R&D = 19910 × 0.0189 = 376.3. Change = 376.3/380.8 − 1 ≈ −0.0118 ≈ −1.2% → A.",
     steps: [
@@ -450,6 +450,185 @@ export const SEED_QUESTIONS: Question[] = [
       "2003 GDP per head = 19330 × 1.03 = 19910 €.",
       "2003 per-head R&D = 19910 × 1.89% = 19910 × 0.0189 = 376.3 €.",
       "Change = 376.3 / 380.8 − 1 ≈ −0.0118 = −1.2% → a fall of about 1.2%, answer A.",
+    ],
+  },
+  // Percentage POINTS vs PERCENT trap. The stem asks for the RELATIVE change;
+  // the raw gap in percentage points is the tempting wrong option.
+  {
+    id: "numerical-03",
+    topic: "numerical",
+    difficulty: "hard",
+    language: "en",
+    table: {
+      caption: "Renewable share of electricity generation (%)",
+      headers: ["Country", "2015", "2021"],
+      rows: [
+        ["Portugal", "28", "42"],
+        ["Spain", "35", "47"],
+        ["Ireland", "25", "36"],
+      ],
+    },
+    stem:
+      "For Portugal, by what percentage did the renewable share of electricity generation increase between 2015 and 2021? (Note: this asks for the relative increase, not the change in percentage points.)",
+    choices: {
+      A: "14%",
+      B: "33%",
+      C: "50%",
+      D: "67%",
+      E: "Cannot be determined",
+    },
+    answer: "C",
+    explanation:
+      "Relative increase = (42 − 28) / 28 = 14/28 = 0.50 = 50% (C). A (14%) is the PERCENTAGE-POINT vs PERCENT trap — 14 is the raw gap in percentage points, not the relative change. B (33%) wrongly divides by the later value (14/42). D (67%) inflates the base error. The share itself is a percentage, but the QUESTION is the relative change of that share.",
+    workedSolution:
+      "Gap = 42 − 28 = 14 percentage points. Relative increase = 14 / 28 = 0.50 = 50% → C.",
+    steps: [
+      "Identify the two values: 28% (2015) and 42% (2021).",
+      "The absolute gap is 42 − 28 = 14 percentage points — this is NOT the answer the stem wants.",
+      "Relative increase = gap ÷ starting value = 14 / 28 = 0.50.",
+      "0.50 = 50% → answer C. (14% would be the percentage-point gap, the trap.)",
+    ],
+  },
+  // Type 1 — reverse percentage then a ratio. A-D are simplified fractions.
+  {
+    id: "numerical-04",
+    topic: "numerical",
+    difficulty: "hard",
+    language: "en",
+    table: {
+      caption: "Public R&D expenditure",
+      headers: ["Country", "R&D spend (€m)", "R&D as % of GDP"],
+      rows: [
+        ["Denmark", "600", "3.0"],
+        ["Austria", "400", "2.0"],
+        ["Greece", "150", "1.5"],
+      ],
+    },
+    stem:
+      "Using total GDP implied by each country's R&D spend and its R&D share of GDP, what is the ratio of Denmark's GDP to Austria's GDP?",
+    choices: {
+      A: "1/1",
+      B: "3/2",
+      C: "2/3",
+      D: "3/1",
+      E: "Cannot be determined",
+    },
+    answer: "A",
+    explanation:
+      "GDP = R&D spend ÷ (R&D % of GDP). Denmark = 600 / 0.03 = 20 000 €m. Austria = 400 / 0.02 = 20 000 €m. Ratio = 20000/20000 = 1/1 (A). C (2/3) is the inverted/unadjusted spend ratio 400/600; B (3/2) is the raw spend ratio 600/400 without the reverse-percentage step.",
+    workedSolution:
+      "Denmark GDP = 600 / 0.03 = 20 000. Austria GDP = 400 / 0.02 = 20 000. Ratio = 20000 / 20000 = 1/1.",
+    steps: [
+      "Denmark GDP = 600 ÷ 3.0% = 600 ÷ 0.03 = 20 000 €m.",
+      "Austria GDP = 400 ÷ 2.0% = 400 ÷ 0.02 = 20 000 €m.",
+      "Ratio Denmark : Austria = 20 000 : 20 000 = 1/1 → answer A.",
+    ],
+  },
+  // Type 2 — growth rate in the stem, 3-step compound value. A-D plain numbers.
+  {
+    id: "numerical-05",
+    topic: "numerical",
+    difficulty: "hard",
+    language: "en",
+    table: {
+      caption: "R&D expenditure by country",
+      headers: ["Country", "R&D spend 2018 (€m)", "R&D as % of GDP 2018", "R&D as % of GDP 2021"],
+      rows: [
+        ["Netherlands", "810", "2.0", "2.2"],
+        ["Sweden", "1 200", "3.2", "3.4"],
+        ["Poland", "300", "1.2", "1.4"],
+      ],
+    },
+    stem:
+      "Given that the Netherlands' GDP grew by 10% between 2018 and 2021, approximately what was its R&D spend in 2021 (in €m)?",
+    choices: {
+      A: "810",
+      B: "891",
+      C: "980",
+      D: "1 089",
+      E: "Cannot be determined",
+    },
+    answer: "C",
+    explanation:
+      "2018 GDP = 810 / 0.02 = 40 500 €m. 2021 GDP = 40 500 × 1.10 = 44 550 €m. 2021 R&D = 44 550 × 2.2% = 980.1 ≈ 980 (C). A (810) applies no change. B (891) applies the 10% growth to the spend directly (810 × 1.10) and forgets the new 2.2% share. D (1 089) applies both the share jump and growth to the wrong base.",
+    workedSolution:
+      "2018 GDP = 810 / 0.02 = 40 500. 2021 GDP = 40 500 × 1.10 = 44 550. 2021 R&D = 44 550 × 0.022 = 980.1 ≈ 980 → C.",
+    steps: [
+      "2018 GDP = R&D ÷ share = 810 ÷ 0.02 = 40 500 €m.",
+      "2021 GDP = 40 500 × (1 + 0.10) = 44 550 €m.",
+      "2021 R&D = 44 550 × 2.2% = 44 550 × 0.022 = 980.1 ≈ 980 €m → C.",
+      "A = no change; B = growth on the spend without the new share (810 × 1.1 = 891).",
+    ],
+  },
+  // Type 3 — missing-data trap: absolute change cannot be found from % alone.
+  {
+    id: "numerical-06",
+    topic: "numerical",
+    difficulty: "hard",
+    language: "en",
+    table: {
+      caption: "Urban population share (%)",
+      headers: ["Country", "2010", "2020"],
+      rows: [
+        ["Romania", "54", "56"],
+        ["Hungary", "69", "72"],
+        ["Croatia", "58", "57"],
+      ],
+    },
+    stem:
+      "By how many people did Romania's urban population change between 2010 and 2020?",
+    choices: {
+      A: "About 0.4 million",
+      B: "About 2 million",
+      C: "About 2 percentage points",
+      D: "About 0.04 million",
+      E: "Cannot be determined",
+    },
+    answer: "E",
+    explanation:
+      "The table gives only the urban SHARE (%) for each year, not the total population in 2010 or 2020. Without an absolute population figure, the change in the NUMBER of people cannot be computed, so E is correct. C is the percentage-point gap (56 − 54 = 2 pp) dressed up as if it answered a 'number of people' question — the classic confusion.",
+    workedSolution:
+      "Urban number = total population × urban share. The table provides only the share (54%, 56%); the total population of Romania is not given for either year. The absolute change in people therefore cannot be determined → E.",
+    steps: [
+      "To get a number of people you need: total population × urban share.",
+      "The table has the share (54% → 56%) but NOT the total population.",
+      "No absolute population is given for 2010 or 2020.",
+      "The number of people cannot be computed → answer E.",
+    ],
+  },
+  // Type 4 — speed check: one step on two printed values.
+  {
+    id: "numerical-07",
+    topic: "numerical",
+    difficulty: "medium",
+    language: "en",
+    table: {
+      caption: "Rail freight carried (million tonnes)",
+      headers: ["Country", "2019", "2022"],
+      rows: [
+        ["Germany", "340", "365"],
+        ["Italy", "95", "110"],
+        ["Belgium", "62", "58"],
+      ],
+    },
+    stem:
+      "What was the combined rail freight carried by Germany and Italy in 2022 (million tonnes)?",
+    choices: {
+      A: "435",
+      B: "460",
+      C: "475",
+      D: "523",
+      E: "Cannot be determined",
+    },
+    answer: "C",
+    explanation:
+      "365 + 110 = 475 (C). A (435) adds the 2019 figures (340 + 95). B (460) mixes years (365 + 95). D (523) adds all three 2022 values including Belgium.",
+    workedSolution:
+      "Germany 2022 = 365. Italy 2022 = 110. Combined = 365 + 110 = 475 → C.",
+    steps: [
+      "Germany 2022 rail freight = 365 million tonnes.",
+      "Italy 2022 rail freight = 110 million tonnes.",
+      "Combined = 365 + 110 = 475 → answer C.",
     ],
   },
 
