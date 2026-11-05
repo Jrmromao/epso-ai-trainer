@@ -1,7 +1,7 @@
 // Standalone verification of the numerical consistency gate against the
 // real-world broken item the user reported, plus control cases.
 // Run with: npx tsx scripts/verify-numerical-gate.mjs
-import { validateQuestion } from "../src/lib/questionSchema.ts";
+import { validateQuestion, buildGenerationPrompt } from "../src/lib/questionSchema.ts";
 
 let pass = 0, fail = 0;
 function check(name, actual, expected) {
@@ -104,6 +104,12 @@ const missing = {
 const r6 = validateQuestion(missing, "numerical", "medium", "en");
 check("missing-data item survives", r6 === null ? "NULL" : "KEPT", "KEPT");
 check("missing-data stays keyed to E", r6 && r6.answer, "E");
+
+// Prompt carries the percentage-point vs percent trap directive.
+const np = buildGenerationPrompt("numerical", 4, undefined, "hard", "en");
+check("numerical prompt carries pp-vs-percent trap", /PERCENTAGE POINTS vs PERCENT/.test(np.system) ? "YES" : "NO", "YES");
+check("pp-vs-percent trap gives the 4%->6% example", /50% RELATIVE/.test(np.system) ? "YES" : "NO", "YES");
+check("SEPARATION rule carves out the pp-vs-% pair", /Exception: a percentage-point-vs-percent/.test(np.system) ? "YES" : "NO", "YES");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

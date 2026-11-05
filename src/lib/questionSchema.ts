@@ -1296,11 +1296,24 @@ function buildNumericalPrompt(count: number, difficulty: Difficulty = "medium", 
     "- Each wrong numeric option is the result of ONE named mistake, not a " +
     "random figure: inverted ratio (2/3 when the answer is 3/2); the other " +
     "year's percentage; stopping before the last percentage step (reporting " +
-    "total GDP instead of public R&D, or the base instead of the expenditure).\n" +
+    "total GDP instead of public R&D, or the base instead of the expenditure); " +
+    "and the PERCENTAGE-POINT vs PERCENT confusion (see below).\n" +
+    "- PERCENTAGE POINTS vs PERCENT (high-yield EPSO trap — use it whenever a " +
+    "question involves the change between two percentage figures): a move from, " +
+    "say, 4% to 6% is a rise of 2 PERCENTAGE POINTS but a 50% RELATIVE increase " +
+    "(2 / 4). When the stem asks for one, make a wrong option the OTHER: if it " +
+    "asks for the relative % change, include the raw percentage-point gap as a " +
+    "distractor, and vice versa. State clearly in the stem which is wanted — use " +
+    "the exact phrase 'percentage points' when you mean the absolute gap and " +
+    "'by what percentage' / 'relative increase' when you mean the proportional " +
+    "change — so the item is unambiguous but still traps a hasty reader. Name " +
+    "this trap explicitly in the explanation for the option that uses it.\n" +
     "- SEPARATION: options must not be a rounding coin-flip. Keep them more " +
     "than 0.5 percentage points apart, and more than about 2% apart relative " +
     "to each other for large euro amounts. If two mistakes would land too " +
-    "close, change the table figures.\n\n" +
+    "close, change the table figures. (Exception: a percentage-point-vs-percent " +
+    "pair is allowed to be numerically close — the two values MEAN different " +
+    "things, which is the whole point of that trap.)\n\n" +
     "WORKED SOLUTION (the answer key is checked against it):\n" +
     "- Types 1, 2, and 4: show the arithmetic. The last token of workedSolution " +
     "must be the correct option's value. For Type 1 that token is the fraction " +
