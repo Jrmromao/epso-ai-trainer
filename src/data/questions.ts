@@ -312,8 +312,80 @@ export const SEED_QUESTIONS: Question[] = [
     answer: "B",
     explanation: "A central versioned store for models and their lineage.",
   },
+  // Scenario — delayed labels: monitor proxy signals, don't wait for ground truth.
+  {
+    id: "mlops-04",
+    topic: "mlops",
+    difficulty: "hard",
+    language: "en",
+    stem:
+      "A deployed model's true labels arrive six weeks late. Accuracy looks fine on the most recent labelled window, but the team worries performance may already be slipping. What is the soundest monitoring approach now?",
+    choices: {
+      A: "Monitor proxy signals — input feature drift (PSI) and the output-probability distribution — to catch degradation before labels arrive.",
+      B: "Wait for the delayed ground-truth labels, since accuracy is the only trustworthy signal.",
+      C: "Lower the decision threshold so more cases are flagged and accuracy stays high.",
+      D: "Retrain on a fixed weekly schedule regardless of any signal.",
+    },
+    answer: "A",
+    explanation:
+      "With a six-week label lag, waiting for accuracy means discovering failure six weeks late; proxy signals (feature PSI, output-distribution shift) detect drift early. B is the delayed-label trap. C masks degradation by moving the threshold. D is blind retraining with no trigger.",
+    optionNotes: {
+      A: { verdict: "true", note: "Proxy signals bridge the label gap, surfacing drift before ground truth lands.", rank: -1 },
+      B: { verdict: "false", note: "Accuracy is trustworthy but arrives too late — waiting is exactly the delayed-label trap.", rank: 0 },
+      C: { verdict: "false", note: "Threshold tweaking hides the problem rather than detecting it.", rank: 1 },
+      D: { verdict: "false", note: "Scheduled retraining without a trigger wastes effort and may not address the actual shift.", rank: 2 },
+    },
+  },
+  // Scenario — data vs concept drift response.
+  {
+    id: "mlops-05",
+    topic: "mlops",
+    difficulty: "hard",
+    language: "en",
+    stem:
+      "Monitoring shows the input feature distribution P(X) has shifted sharply after a new marketing campaign brought a different user mix, but early sampled labels suggest the input→label relationship is unchanged. What is the most appropriate first response?",
+    choices: {
+      A: "Treat it as data (covariate) drift: validate performance on the new segment and retrain/re-weight if accuracy there is poor.",
+      B: "Treat it as concept drift and immediately relabel the entire historical dataset.",
+      C: "Ignore it: only output drift matters, never input drift.",
+      D: "Roll back to the previous model version to restore the old input distribution.",
+    },
+    answer: "A",
+    explanation:
+      "A shift in P(X) with a stable P(Y|X) is data/covariate drift; the right move is to check performance on the new segment and re-weight or retrain if needed. B misdiagnoses it as concept drift. C is false — input drift matters. D cannot change the real-world input distribution.",
+    optionNotes: {
+      A: { verdict: "true", note: "P(X) shifted, P(Y|X) stable = covariate drift; verify on the new segment and re-weight/retrain as needed.", rank: -1 },
+      B: { verdict: "false", note: "Relabelling everything assumes concept drift, which the stable relationship rules out — the main trap.", rank: 0 },
+      C: { verdict: "false", note: "Input drift can degrade performance even when labels are unavailable; it cannot be ignored.", rank: 1 },
+      D: { verdict: "false", note: "Rolling back the model does not change the real-world input mix that shifted.", rank: 2 },
+    },
+  },
+  // CI/CD for models — what distinguishes it from classic software CD.
+  {
+    id: "mlops-06",
+    topic: "mlops",
+    difficulty: "medium",
+    language: "en",
+    stem:
+      "Compared with classic software CI/CD, a model deployment pipeline additionally requires which safeguard before promoting a new model to production?",
+    choices: {
+      A: "Evaluation on a held-out/shadow dataset and a check against the current production model, because code tests alone do not prove predictive quality.",
+      B: "Only that unit tests on the serving code pass, exactly as for any web service.",
+      C: "Deleting the previous model so the registry stays small.",
+      D: "Disabling monitoring to avoid alert noise after release.",
+    },
+    answer: "A",
+    explanation:
+      "Models can regress in predictive quality even when all code tests pass, so promotion needs offline evaluation plus a comparison (often shadow/canary) against the incumbent. B ignores model quality. C destroys rollback ability. D removes the signal you most need post-release.",
+    optionNotes: {
+      A: { verdict: "true", note: "Predictive quality must be gated separately from code correctness — evaluate and compare against the live model.", rank: -1 },
+      B: { verdict: "false", note: "Passing serving-code tests says nothing about whether predictions got better or worse — the tempting 'it's just CD' trap.", rank: 0 },
+      C: { verdict: "false", note: "Keeping prior versions is what enables rollback; deleting them is the opposite of safe.", rank: 1 },
+      D: { verdict: "false", note: "Monitoring is most critical right after a release, not something to switch off.", rank: 2 },
+    },
+  },
 
-  // ---------------- TRUSTWORTHY AI ----------------
+
   {
     id: "trust-01",
     topic: "trustworthy-ai",
@@ -360,8 +432,80 @@ export const SEED_QUESTIONS: Question[] = [
     answer: "B",
     explanation: "Human agency and oversight is a core requirement of Trustworthy AI.",
   },
+  // Accuracy illusion vs disaggregated fairness metrics.
+  {
+    id: "trust-04",
+    topic: "trustworthy-ai",
+    difficulty: "hard",
+    language: "en",
+    stem:
+      "An AI triage tool reports 93% overall accuracy and strong ROC-AUC, and the vendor cites these as evidence it is fair across patient groups. What is the soundest reviewer response?",
+    choices: {
+      A: "Overall accuracy/ROC-AUC can hide large per-group error gaps; require disaggregated group error rates (and PR-AUC on the minority class).",
+      B: "Accept it: high overall accuracy and ROC-AUC are sufficient evidence of fairness.",
+      C: "Reject it: ROC-AUC is never a valid metric for classifiers.",
+      D: "Require only that the protected attributes be deleted from the model.",
+    },
+    answer: "A",
+    explanation:
+      "Aggregate metrics can mask severe disparities for small subgroups; fairness needs error rates broken down by group (and minority-class PR-AUC). B conflates accuracy with fairness. C overstates — ROC-AUC is valid but insufficient here. D is fairness-by-blindness, which ignores proxy variables.",
+    optionNotes: {
+      A: { verdict: "true", note: "Disaggregated group error rates reveal disparities that a single aggregate number conceals.", rank: -1 },
+      B: { verdict: "false", note: "High overall accuracy says nothing about per-group fairness — the central accuracy-illusion trap.", rank: 0 },
+      C: { verdict: "false", note: "ROC-AUC is a legitimate metric; the issue is that it is insufficient for fairness, not invalid.", rank: 2 },
+      D: { verdict: "false", note: "Dropping protected attributes ignores correlated proxies — fairness-by-blindness.", rank: 1 },
+    },
+  },
+  // Demographic parity vs equalized odds.
+  {
+    id: "trust-05",
+    topic: "trustworthy-ai",
+    difficulty: "hard",
+    language: "en",
+    stem:
+      "A lending model is tuned so that each group receives loan approvals at the same RATE. An auditor objects that qualified applicants are still rejected at different rates across groups. Which fairness notions are in tension here?",
+    choices: {
+      A: "The model satisfies demographic parity (equal positive rates) but may violate equalized odds (equal error rates across groups).",
+      B: "The model satisfies equalized odds, which guarantees equal approval rates.",
+      C: "Both notions are identical, so the auditor's objection is incoherent.",
+      D: "Fairness requires only that protected attributes are excluded from the features.",
+    },
+    answer: "A",
+    explanation:
+      "Equal approval rates = demographic parity; equal error rates (e.g. equal true-positive/false-positive rates) = equalized odds. They can conflict, which is exactly the auditor's point. B confuses the two. C is false — they are distinct criteria. D is fairness-by-blindness again.",
+    optionNotes: {
+      A: { verdict: "true", note: "Demographic parity equalises positive rates; equalized odds equalises error rates — satisfying one can violate the other.", rank: -1 },
+      B: { verdict: "false", note: "Equalized odds concerns error rates, not approval rates — the key metric-confusion trap.", rank: 0 },
+      C: { verdict: "false", note: "The two criteria are mathematically distinct and often incompatible.", rank: 1 },
+      D: { verdict: "false", note: "Excluding protected attributes does not achieve either statistical fairness criterion.", rank: 2 },
+    },
+  },
+  // Robustness / human oversight in practice.
+  {
+    id: "trust-06",
+    topic: "trustworthy-ai",
+    difficulty: "medium",
+    language: "en",
+    stem:
+      "A high-risk AI system includes a 'human-in-the-loop' step, but in practice reviewers approve 99.8% of the model's recommendations within two seconds each. What best describes the concern?",
+    choices: {
+      A: "Automation bias / rubber-stamping: nominal oversight that does not constitute effective human oversight.",
+      B: "The system is fully compliant because a human technically signs off each case.",
+      C: "The model is overfitting because approvals are so fast.",
+      D: "This is concept drift in the reviewers.",
+    },
+    answer: "A",
+    explanation:
+      "Meaningful human oversight must be capable of actually changing the outcome; a near-automatic rubber-stamp is automation bias and fails the oversight requirement. B mistakes a formality for effective oversight. C and D misapply unrelated ML terms to a human-process problem.",
+    optionNotes: {
+      A: { verdict: "true", note: "Oversight must be effective, not nominal; 99.8% two-second approvals signal rubber-stamping.", rank: -1 },
+      B: { verdict: "false", note: "A technical sign-off is not effective oversight — the tempting 'a human is involved' trap.", rank: 0 },
+      C: { verdict: "false", note: "Overfitting is a training phenomenon, unrelated to how fast humans approve.", rank: 1 },
+      D: { verdict: "false", note: "'Concept drift in reviewers' misuses a data term for a human-process issue.", rank: 2 },
+    },
+  },
 
-  // ---------------- POLICY ----------------
+
   {
     id: "policy-01",
     topic: "policy",
