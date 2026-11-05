@@ -33,6 +33,45 @@ check("genai-rag prompt carries fine-tune vs RAG vs prompt trap", /FINE-TUNE vs 
 const policy = buildGenerationPrompt("policy", 5, undefined, "hard", "en");
 check("policy prompt carries model-vs-system legal-distinction trap", /MODEL vs SYSTEM/.test(policy.user));
 
+// 1d) Exhibit (table) + paired-definition field formats.
+check("field prompt requests EXHIBIT FORMAT", /EXHIBIT FORMAT/.test(field.system));
+check("field prompt output shape allows a table", /"table":\{"caption"/.test(field.system));
+check("field prompt requests PAIRED-DEFINITION variant", /PAIRED-DEFINITION/.test(field.system));
+
+// 1e) An exhibit (table) field item validates and keeps its table.
+const exhibit = JSON.stringify({ questions: [{
+  stem: "A team selects feedback for retraining an assistant. Its protocol requires independently verified labels and an evaluation set containing neither training cases nor paraphrases of them. Which preparation plan best supports a valid release decision?",
+  table: {
+    caption: "Available evidence",
+    headers: ["Source", "Volume", "Quality or overlap finding"],
+    rows: [
+      ["Public positive ratings", "1,200", "No independent verification; 720 from 12 accounts"],
+      ["Staff corrected answers", "180", "Independently checked; 40 paraphrase locked benchmark"],
+      ["Locked benchmark", "300", "Questions were visible to staff preparing corrections"],
+      ["Fresh production sample", "240", "Covers both channels; labels not yet collected"],
+    ],
+  },
+  choices: {
+    A: "Train on all ratings and corrections; evaluate on the locked benchmark.",
+    B: "Verify and deduplicate feedback, exclude benchmark-related cases from training, and independently label a fresh sample covering both channels.",
+    C: "Train only on checked corrections; evaluate on the full locked benchmark.",
+    D: "Train on deduplicated public ratings; evaluate on staff corrections.",
+  },
+  answer: "B",
+  difficulty: "hard",
+  language: "en",
+  explanation: "B is correct: verify + deduplicate + exclude benchmark paraphrases + freshly label a held-out sample. A/C contaminate evaluation via the 40 benchmark paraphrases; D assumes channel difference guarantees independence.",
+  optionNotes: {
+    A: { verdict: "false", note: "Positive ratings lack verified labels and the benchmark is contaminated by staff-visible questions." },
+    B: { verdict: "true", note: "Only B satisfies both constraints: verified labels and an evaluation set free of training cases and their paraphrases." },
+    C: { verdict: "false", note: "The 40 benchmark paraphrases in the corrections invalidate evaluating on the full benchmark." },
+    D: { verdict: "false", note: "Different channels do not guarantee independent ground truth or non-overlap." },
+  },
+}] });
+const parsedExhibit = parseQuestions(exhibit, "mlops", "hard", "en", { mode: "preserve" });
+check("exhibit item validates", parsedExhibit.length === 1, `got ${parsedExhibit.length}`);
+check("exhibit table preserved", !!parsedExhibit[0]?.table && parsedExhibit[0].table.rows.length === 4);
+
 // 2) Verbal T/F prompt does NOT get the scenario block (it has a fixed format).
 const verbal = buildGenerationPrompt("verbal", 5, undefined, "medium", "en");
 check("verbal T/F prompt has NO scenario block", !/SCENARIO FORMAT/.test(verbal.system));

@@ -942,7 +942,36 @@ export function buildGenerationPrompt(
       " ground-truth labels arrive weeks late (drift detection × delayed labels);" +
       " a 98%-accuracy classifier on a 1%-positive problem (headline metric ×" +
       " class imbalance). State both concepts in the vignette so the correct" +
-      " answer depends on resolving their interaction."
+      " answer depends on resolving their interaction." +
+      " EXHIBIT FORMAT (use for roughly ONE IN FIVE items, especially at hard):" +
+      " instead of a prose-only vignette, attach a small structured \"table\"" +
+      " (an EXHIBIT) that the question reasons over — e.g. a feedback/retraining" +
+      " audit (columns: Source, Volume, Quality-or-overlap finding), a" +
+      " model-comparison on a held-out set (rows: Model, counts of" +
+      " correct/urgent-detected), a dataset inventory (Source, Size, Language" +
+      " coverage, Label verification), or a drift-monitoring log (Window, PSI," +
+      " label-availability). The stem sets a goal/constraint and asks for the" +
+      " valid plan/interpretation; the CORRECT answer must require reading" +
+      " ACROSS rows (e.g. verify + deduplicate + exclude benchmark-overlap +" +
+      " independently label a fresh sample), and each distractor must misuse one" +
+      " row or confuse two columns. Keep the table to 3-5 rows and 2-4 columns so" +
+      " it reads under time pressure. Put the exhibit in the \"table\" field" +
+      " (caption/headers/rows), NOT crammed into the stem."
+    : "";
+
+  // Paired-definition answer format: a reliable difficulty lever (each option is
+  // a pair of definitions; exactly one pairs both correctly). Steered for field
+  // topics where a two-axis distinction is natural (size vs representativeness,
+  // precision vs recall, drift types, provider vs deployer).
+  const pairedNote = isFieldTopic
+    ? " PAIRED-DEFINITION VARIANT (use occasionally, ~one in six): make every" +
+      " option a PAIR of short definitions of two contrasted terms (e.g." +
+      " 'Dataset size measures volume; representativeness concerns coverage of" +
+      " the intended cases'). Exactly one option defines BOTH terms correctly;" +
+      " each distractor keeps one half right and swaps the other for a plausible" +
+      " but wrong notion (coverage↔label-accuracy, relevance↔test-split," +
+      " diversity↔update-frequency). This tests whether the candidate can hold a" +
+      " two-axis distinction, not just recognise one term."
     : "";
 
   // Per-option learn-mode notes for field items: after answering, the app shows
@@ -969,10 +998,11 @@ export function buildGenerationPrompt(
   // JSON shape differs for field items (they also emit optionNotes).
   const outputShape = isFieldTopic
     ? "Output ONLY a JSON object of the form " +
-      '{"questions":[{"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string},' +
+      '{"questions":[{"stem":string,"table":{"caption":string,"headers":string[],"rows":string[][]}|null,' +
+      '"choices":{"A":string,"B":string,"C":string,"D":string},' +
       '"answer":"A"|"B"|"C"|"D","difficulty":"easy"|"medium"|"hard","language":string,"explanation":string,' +
       '"optionNotes":{"A":{"verdict":"true"|"false","note":string},"B":{...},"C":{...},"D":{...}}' +
-      "}]}. No prose outside the JSON."
+      '}]}. Include "table" ONLY for exhibit items; omit it or set null otherwise. No prose outside the JSON.'
     : "Output ONLY a JSON object of the form " +
       '{"questions":[{"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string},' +
       '"answer":"A"|"B"|"C"|"D","difficulty":"easy"|"medium"|"hard","language":string,"explanation":string' +
@@ -991,6 +1021,7 @@ export function buildGenerationPrompt(
     outputShape +
     difficultyNote +
     scenarioNote +
+    pairedNote +
     optionNotesNote +
     ANTI_TELL_RULES +
     verbalNote +
