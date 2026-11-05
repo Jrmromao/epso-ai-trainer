@@ -5,3 +5,6 @@ node_modules/
 .vercel
 .DS_Store
 .harness/
+
+# TypeScript incremental build cache (generated)
+*.tsbuildinfo
