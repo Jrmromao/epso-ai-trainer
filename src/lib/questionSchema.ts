@@ -800,6 +800,32 @@ const TOPIC_TRAPS: Partial<Record<Topic, string>> = {
     " ACCURACY ILLUSION (accuracy/ROC-AUC vs PR-AUC/F1); (b) data vs concept drift;" +
     " (c) overfitting-vs-underfitting direction errors; (d) leakage disguised as" +
     " strong validation performance.",
+  "genai-rag":
+    " NAMED TRAPS (use at least one per item as a distractor): (a) PROMPT-INJECTION" +
+    " / TOOL-AUTHORITY — treating untrusted RETRIEVED or user-supplied text as if" +
+    " it were a trusted instruction that may trigger a tool/action (the correct" +
+    " move is to block the action and re-establish the trust boundary, NOT to let" +
+    " the model judge the instruction's credibility and proceed); align with OWASP" +
+    " LLM prompt-injection guidance; (b) RETRIEVAL vs PARAMETRIC KNOWLEDGE —" +
+    " attributing a hallucination to missing retrieval when the context WAS" +
+    " retrieved (grounding/faithfulness failure) or vice versa; (c) FAITHFULNESS" +
+    " vs ANSWER-RELEVANCE — grading a RAG answer only on fluency/relevance while" +
+    " ignoring whether it is SUPPORTED by the retrieved context; (d) CHUNKING /" +
+    " EMBEDDING MISMATCH — blaming the LLM for a failure actually caused by poor" +
+    " chunk size, a stale index, or an embedding-model/query mismatch; (e)" +
+    " FINE-TUNE vs RAG vs PROMPT — recommending fine-tuning to add fresh factual" +
+    " knowledge (a retrieval/grounding job) or RAG to change behaviour/format (a" +
+    " fine-tuning/prompting job); (f) CONTEXT-POISONING — accepting that removing" +
+    " one malicious retrieved passage and re-running a single query proves the" +
+    " pipeline is now safe.",
+  policy:
+    " NAMED TRAPS (use at least one per item as a distractor): (a) MODEL vs SYSTEM" +
+    " LEGAL DISTINCTION — treating a passed GPAI MODEL-level assurance as settling" +
+    " the classification of the legally distinct AI SYSTEM that embeds it" +
+    " (e.g. a system that is a regulated product's safety component must be" +
+    " assessed separately under the product-safety high-risk route); (b)" +
+    " AI-OFFICE vs NATIONAL-AUTHORITY enforcement scope; (c) VOLUNTARY-CODE vs" +
+    " BINDING-OBLIGATION confusion (GPAI codes of practice vs statutory duties).",
 };
 
 
@@ -872,9 +898,15 @@ export function buildGenerationPrompt(
     return buildNumericalPrompt(count, difficulty, language);
   }
 
+  const verbalChoices =
+    language === "pt-PT"
+      ? 'A "Verdadeiro", B "Falso", C "Não é possível saber", and set D to "-"'
+      : 'A "True", B "False", C "Cannot say", and set D to "-"';
   const verbalNote =
     topic === "verbal"
-      ? ' Provide a short passage in the "stem", then a statement to judge; choices must be "True", "False", "Cannot say", and set D to "-".'
+      ? " This is the live EPSO verbal item: a short neutral passage, then ONE" +
+        " statement to judge from that passage alone. Do not use outside knowledge." +
+        ` Choices must be exactly ${verbalChoices}. Do not add a fourth real option.`
       : "";
 
   const difficultyNote = DIFFICULTY_INSTRUCTIONS[difficulty] ?? DIFFICULTY_INSTRUCTIONS.medium;

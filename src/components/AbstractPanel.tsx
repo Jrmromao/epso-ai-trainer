@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import type { Direction, Element, Panel, SegPattern, ShapeKind } from "@/lib/abstractReasoning";
 
 // Renders a single abstract-reasoning panel as inline SVG. Deterministic, no
@@ -6,46 +6,215 @@ import type { Direction, Element, Panel, SegPattern, ShapeKind } from "@/lib/abs
 
 const BOX = 100; // viewBox size
 
+// Regular polygon vertices as an SVG points string. startDeg -90 = vertex at top.
+function polyPts(n: number, cx: number, cy: number, r: number, startDeg = -90): string {
+  const pts: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = ((startDeg + (360 * i) / n) * Math.PI) / 180;
+    pts.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`);
+  }
+  return pts.join(" ");
+}
+
+function starPts(cx: number, cy: number, r: number): string {
+  const pts: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.42;
+    const a = ((-90 + 36 * i) * Math.PI) / 180;
+    pts.push(`${(cx + rad * Math.cos(a)).toFixed(2)},${(cy + rad * Math.sin(a)).toFixed(2)}`);
+  }
+  return pts.join(" ");
+}
+
 function Shape({ el, cx, cy, size }: { el: Element; cx: number; cy: number; size: number }) {
-  const fillColor = el.fill === "solid" ? "#111827" : "none";
-  const stroke = "#111827";
+  // Unique per instance, so clipPaths/patterns never collide between the many
+  // panels rendered on one page. Colons are not valid inside url(#...).
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "_");
+  const INK = "#111827";
   const sw = 2;
   const r = (size / 2) * (el.scale ?? 1);
-  // A reflected element is mirrored horizontally about its own centre.
-  const inner = ((): ReactNode => {
-  switch (el.shape) {
-    case "circle":
-      return <circle cx={cx} cy={cy} r={r} fill={fillColor} stroke={stroke} strokeWidth={sw} />;
-    case "square":
-      return (
-        <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2} fill={fillColor} stroke={stroke} strokeWidth={sw} />
-      );
-    case "triangle": {
-      // honour `tri` orientation (up default, down if set); mirror handled by wrapper
-      const down = el.tri === "down";
-      // a right-leaning asymmetric triangle so mirroring is visible
-      const pts = down
-        ? `${cx - r},${cy + r} ${cx + r},${cy + r} ${cx + r},${cy - r}`
-        : `${cx - r},${cy - r} ${cx + r},${cy - r} ${cx + r},${cy + r}`;
-      return <polygon points={pts} fill={fillColor} stroke={stroke} strokeWidth={sw} />;
+
+  // Draw the geometry once per paint: `f` is the fill attribute to use.
+  const draw = (f: string): ReactNode => {
+    switch (el.shape) {
+      case "circle":
+        return <circle cx={cx} cy={cy} r={r} fill={f} stroke={INK} strokeWidth={sw} />;
+      case "square":
+        return <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2} fill={f} stroke={INK} strokeWidth={sw} />;
+      case "triangle": {
+        // A clear point up or down. The apex sits off-centre only when mirrored.
+        const down = el.tri === "down";
+        const apexX = el.mirror ? cx + r * 0.45 : cx;
+        const pts = down
+          ? `${cx - r},${cy - r * 0.85} ${cx + r},${cy - r * 0.85} ${apexX},${cy + r}`
+          : `${cx - r},${cy + r * 0.85} ${cx + r},${cy + r * 0.85} ${apexX},${cy - r}`;
+        return <polygon points={pts} fill={f} stroke={INK} strokeWidth={sw} />;
+      }
+      case "diamond":
+        return <polygon points={`${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`} fill={f} stroke={INK} strokeWidth={sw} />;
+      case "cross": {
+        const a = r * 0.36;
+        const pts = [
+          [-a, -r], [a, -r], [a, -a], [r, -a], [r, a], [a, a],
+          [a, r], [-a, r], [-a, a], [-r, a], [-r, -a], [-a, -a],
+        ].map(([x, y]) => `${cx + x},${cy + y}`).join(" ");
+        return <polygon points={pts} fill={f} stroke={INK} strokeWidth={sw} strokeLinejoin="round" />;
+      }
+      case "star":
+        return <polygon points={starPts(cx, cy, r * 1.08)} fill={f} stroke={INK} strokeWidth={sw} strokeLinejoin="round" />;
+      case "hexagon":
+        return <polygon points={polyPts(6, cx, cy, r, 0)} fill={f} stroke={INK} strokeWidth={sw} />;
+      case "ngon":
+        return <polygon points={polyPts(Math.max(3, el.sides ?? 5), cx, cy, r, -90)} fill={f} stroke={INK} strokeWidth={sw} />;
+      case "lshape": {
+        const pts = [
+          [-r, -r], [-0.2 * r, -r], [-0.2 * r, 0.2 * r], [r, 0.2 * r], [r, r], [-r, r],
+        ].map(([x, y]) => `${cx + x},${cy + y}`).join(" ");
+        return <polygon points={pts} fill={f} stroke={INK} strokeWidth={sw} strokeLinejoin="round" />;
+      }
+      case "chevron": {
+        const pts = [
+          [-r, -r], [0, -r], [r, 0], [0, r], [-r, r], [0, 0],
+        ].map(([x, y]) => `${cx + x},${cy + y}`).join(" ");
+        return <polygon points={pts} fill={f} stroke={INK} strokeWidth={sw} strokeLinejoin="round" />;
+      }
+      case "semicircle": {
+        // flat edge at the bottom; vertically centred in its cell
+        const y = cy + r * 0.5;
+        return <path d={`M ${cx - r} ${y} A ${r} ${r} 0 0 1 ${cx + r} ${y} Z`} fill={f} stroke={INK} strokeWidth={sw} strokeLinejoin="round" />;
+      }
+      case "crescent": {
+        // outer circle r minus an offset circle 0.78r; opens to the right
+        const ox = cx - r * 0.17;
+        const a = r * 0.66, h = r * 0.7512, r2 = r * 0.78;
+        return (
+          <path
+            d={`M ${ox + a} ${cy - h} A ${r} ${r} 0 1 0 ${ox + a} ${cy + h} A ${r2} ${r2} 0 1 1 ${ox + a} ${cy - h} Z`}
+            fill={f}
+            stroke={INK}
+            strokeWidth={sw}
+            strokeLinejoin="round"
+          />
+        );
+      }
+      case "pacman": {
+        // A disc with a wedge removed. The gap is centred on +x (pointing right)
+        // and `rot` turns it; `open` is the gap width in degrees.
+        const open = Math.max(10, Math.min(300, el.open ?? 90));
+        const a = ((open / 2) * Math.PI) / 180;
+        const x1 = cx + r * Math.cos(a), y1 = cy + r * Math.sin(a);
+        const x2 = cx + r * Math.cos(-a), y2 = cy + r * Math.sin(-a);
+        const large = 360 - open > 180 ? 1 : 0;
+        return (
+          <path
+            d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`}
+            fill={f}
+            stroke={INK}
+            strokeWidth={sw}
+            strokeLinejoin="round"
+          />
+        );
+      }
+      case "dirCircle": {
+        // A ringed circle with a solid arrowhead pointing UP (then turned by rot).
+        const tip = cy - r * 0.72, baseY = cy - r * 0.12, w = r * 0.42;
+        return (
+          <>
+            <circle cx={cx} cy={cy} r={r} fill={f === INK ? "none" : f} stroke={INK} strokeWidth={sw} />
+            <polygon points={`${cx},${tip} ${cx - w},${baseY} ${cx + w},${baseY}`} fill={INK} />
+          </>
+        );
+      }
+      case "face": {
+        const eyeY = cy - r * 0.28, eyeDX = r * 0.38, eyeR = Math.max(1.4, r * 0.1);
+        const my = cy + r * 0.3, mw = r * 0.5;
+        const smile = el.smile !== false;
+        const mouth = smile
+          ? `M ${cx - mw} ${my} Q ${cx} ${my + r * 0.4} ${cx + mw} ${my}`
+          : `M ${cx - mw} ${my + r * 0.28} Q ${cx} ${my - r * 0.14} ${cx + mw} ${my + r * 0.28}`;
+        return (
+          <>
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke={INK} strokeWidth={sw} />
+            <circle cx={cx - eyeDX} cy={eyeY} r={eyeR} fill={INK} />
+            <circle cx={cx + eyeDX} cy={eyeY} r={eyeR} fill={INK} />
+            <path d={mouth} fill="none" stroke={INK} strokeWidth={Math.max(1.6, sw)} strokeLinecap="round" />
+          </>
+        );
+      }
+      case "arrow":
+        return <Arrow dir={el.direction ?? "up"} cx={cx} cy={cy} size={size} />;
+      case "pie":
+        return <Pie quarter={el.quarter ?? 0} cx={cx} cy={cy} r={r} />;
+      default:
+        return null;
     }
-    case "diamond": {
-      const pts = `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`;
-      return <polygon points={pts} fill={fillColor} stroke={stroke} strokeWidth={sw} />;
-    }
-    case "arrow":
-      return <Arrow dir={el.direction ?? "up"} cx={cx} cy={cy} size={size} />;
-    case "pie":
-      return <Pie quarter={el.quarter ?? 0} cx={cx} cy={cy} r={r} />;
-    default:
-      return null;
+  };
+
+  const hatchId = `${uid}h`;
+  const clipId = `${uid}c`;
+  let body: ReactNode;
+  if (el.fill === "half") {
+    // outline of the whole shape + the LEFT half filled (turns with `rot`)
+    body = (
+      <>
+        {draw("none")}
+        <clipPath id={clipId}>
+          <rect x={cx - r * 1.6} y={cy - r * 1.6} width={r * 1.6} height={r * 3.2} />
+        </clipPath>
+        <g clipPath={`url(#${clipId})`}>{draw(INK)}</g>
+      </>
+    );
+  } else if (el.fill === "hatch") {
+    body = (
+      <>
+        <defs>
+          <pattern id={hatchId} width={4} height={4} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1={0} y1={0} x2={0} y2={4} stroke={INK} strokeWidth={1.6} />
+          </pattern>
+        </defs>
+        {draw(`url(#${hatchId})`)}
+      </>
+    );
+  } else {
+    body = draw(el.fill === "solid" ? INK : el.fill === "white" ? "#ffffff" : "none");
   }
-  })();
-  // Horizontal mirror about the element's own centre when `mirror` is set.
+
+  // Polygon marker: a small ringed dot just inside vertex 0, so a turn stays
+  // readable however symmetric the polygon happens to be.
+  const marker =
+    el.shape === "ngon" ? (
+      <circle cx={cx} cy={cy - r * 0.64} r={Math.max(3.4, r * 0.2)} fill="#ffffff" stroke={INK} strokeWidth={2} />
+    ) : null;
+
+  const turned =
+    el.rot && el.shape !== "arrow" && el.shape !== "pie" && el.shape !== "face" ? (
+      <g transform={`rotate(${el.rot} ${cx} ${cy})`}>
+        {body}
+        {marker}
+      </g>
+    ) : (
+      <>
+        {body}
+        {marker}
+      </>
+    );
+
+  // Concentric containers around the element (not rotated: they are circles).
+  const rings = Array.from({ length: Math.max(0, Math.min(3, el.rings ?? 0)) }, (_, i) => (
+    <circle key={i} cx={cx} cy={cy} r={r * 1.28 + i * 5} fill="none" stroke={INK} strokeWidth={1.5} />
+  ));
+
+  const inner = (
+    <>
+      {rings}
+      {turned}
+    </>
+  );
+  // A reflected element is mirrored horizontally about its own centre.
   if (el.mirror) {
     return <g transform={`translate(${2 * cx} 0) scale(-1 1)`}>{inner}</g>;
   }
-  return <>{inner}</>;
+  return inner;
 }
 
 // A quarter-filled circle. `quarter` 0..3 selects which 90° wedge is filled,
@@ -95,9 +264,9 @@ function slotPositions(layout: Panel["layout"], count: number): { x: number; y: 
       return [{ x: 0.5, y: 0.5 }];
     case "row3":
       return [
-        { x: 0.22, y: 0.5 },
+        { x: 0.17, y: 0.5 },
         { x: 0.5, y: 0.5 },
-        { x: 0.78, y: 0.5 },
+        { x: 0.83, y: 0.5 },
       ];
     case "stack2":
       return [
@@ -131,7 +300,8 @@ function slotPositions(layout: Panel["layout"], count: number): { x: number; y: 
 function shapeSize(layout: Panel["layout"]): number {
   if (layout === "single") return 36;
   if (layout === "cross") return 22;
-  if (layout === "pieCross") return 20;
+  if (layout === "pieCross") return 22;
+  if (layout === "row3") return 26;
   return 24;
 }
 
@@ -253,23 +423,186 @@ function CurvesPanel({ curves }: { curves: { y: number; flip: boolean }[] }) {
   );
 }
 
+// GRID3: nine equal cells. A shape is centred in its cell at one fixed size,
+// so a move is a move into the next cell and never a resize.
+function Grid3Panel({ slots }: { slots: (Element | null)[] }) {
+  const pad = 5;
+  const gap = 3;
+  const cell = (BOX - pad * 2 - gap * 2) / 3;
+  const shape = 18;
+  const cells = [];
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const x = pad + c * (cell + gap);
+      const y = pad + r * (cell + gap);
+      const el = slots[r * 3 + c] ?? null;
+      cells.push(
+        <g key={`${r}-${c}`}>
+          <rect
+            x={x}
+            y={y}
+            width={cell}
+            height={cell}
+            rx={2}
+            fill="#ffffff"
+            stroke="#c5d0de"
+            strokeWidth={1.25}
+          />
+          {el && <Shape el={el} cx={x + cell / 2} cy={y + cell / 2} size={shape} />}
+        </g>,
+      );
+    }
+  }
+  return <>{cells}</>;
+}
+
 // COMPOSITE: N independent rows of elements stacked vertically (2-6 rows).
 // Element size adapts to the row count so dense panels stay legible.
 function Composite3Panel({ rows }: { rows: Element[][] }) {
-  const R = rows.length;
-  const maxCols = Math.max(1, ...rows.map((r) => r.length));
-  // shrink elements as rows/columns grow
-  const sz = Math.max(8, Math.min(16, Math.floor(70 / Math.max(R, maxCols))));
+  const R = Math.max(1, rows.length);
   return (
     <>
       {rows.map((row, r) => {
-        const cy = ((r + 1) / (R + 1)) * BOX;
-        const n = row.length;
+        const n = Math.max(1, row.length);
+        const bandH = BOX / R;
+        // Stay inside the row and leave a gap between neighbours, so a count
+        // of six is still countable instead of a single blob.
+        const sz = Math.min(22, bandH * 0.7, ((BOX - 10) / n) * 0.72);
+        const cy = bandH * (r + 0.5);
         return row.map((el, c) => {
-          const cx = ((c + 1) / (n + 1)) * BOX;
+          const cx = (BOX * (c + 0.5)) / n;
           return <Shape key={`${r}-${c}`} el={el} cx={cx} cy={cy} size={sz} />;
         });
       })}
+    </>
+  );
+}
+
+// BARS: a bar chart of integer heights with a triangle marker above one bar and
+// a dot-count beneath. Models the EPSO conserved-quantity height-transfer item.
+function BarsPanel({ bars, markerBar, dots }: { bars: number[]; markerBar?: number; dots?: number }) {
+  const n = bars.length;
+  const maxH = 9; // heights live in 0..9
+  const chartTop = 16; // leave room for the marker triangle
+  const chartBottom = 82; // leave room for the dot row
+  const chartH = chartBottom - chartTop;
+  const slotW = BOX / n;
+  const barW = slotW * 0.55;
+  const items: ReactNode[] = [];
+  for (let i = 0; i < n; i++) {
+    const h = Math.max(0, Math.min(maxH, bars[i]));
+    const px = (h / maxH) * chartH;
+    const cx = slotW * (i + 0.5);
+    const x = cx - barW / 2;
+    const y = chartBottom - px;
+    items.push(
+      <rect key={`b${i}`} x={x} y={y} width={barW} height={px} fill="#9fb0c3" stroke="#334155" strokeWidth={1} />,
+    );
+    // marker triangle above this bar
+    if (markerBar === i) {
+      items.push(
+        <polygon
+          key={`m${i}`}
+          points={`${cx - 5},${chartTop - 10} ${cx + 5},${chartTop - 10} ${cx},${chartTop - 2}`}
+          fill="#111827"
+        />,
+      );
+    }
+  }
+  // dot-count row beneath the chart
+  const d = Math.max(0, Math.min(6, dots ?? 0));
+  for (let i = 0; i < d; i++) {
+    const dx = BOX / 2 + (i - (d - 1) / 2) * 10;
+    items.push(<circle key={`d${i}`} cx={dx} cy={92} r={3} fill="#111827" />);
+  }
+  return <>{items}</>;
+}
+
+// ROWCOL: a grid with one whole row and one whole column highlighted (light
+// blue), their single intersection cell coloured grey or navy. Models the EPSO
+// row-down / column-left / alternating-intersection item.
+function RowColPanel({
+  rows,
+  cols,
+  hiRow,
+  hiCol,
+  intersectColor,
+}: {
+  rows: number;
+  cols: number;
+  hiRow: number;
+  hiCol: number;
+  intersectColor: "grey" | "navy";
+}) {
+  const pad = 6;
+  const gap = 3;
+  const cw = (BOX - pad * 2 - gap * (cols - 1)) / cols;
+  const ch = (BOX - pad * 2 - gap * (rows - 1)) / rows;
+  const cells: ReactNode[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = pad + c * (cw + gap);
+      const y = pad + r * (ch + gap);
+      const onRow = r === hiRow;
+      const onCol = c === hiCol;
+      let fill = "#ffffff";
+      if (onRow && onCol) fill = intersectColor === "navy" ? "#1e2a52" : "#8a94a6";
+      else if (onRow || onCol) fill = "#c9dbf0";
+      cells.push(
+        <rect
+          key={`${r}-${c}`}
+          x={x}
+          y={y}
+          width={cw}
+          height={ch}
+          rx={2}
+          fill={fill}
+          stroke="#c5d0de"
+          strokeWidth={1.25}
+        />,
+      );
+    }
+  }
+  return <>{cells}</>;
+}
+
+// NESTED: a grey or white background, a large OUTER shape, a smaller INNER shape
+// (opaque white so it reads on top of any outer fill) and a small CORNER shape.
+function NestedPanel({ nest, bg }: { nest: NonNullable<Panel["nest"]>; bg?: "grey" | "white" }) {
+  return (
+    <>
+      <rect x={0} y={0} width={BOX} height={BOX} fill={bg === "grey" ? "#d3d8df" : "#ffffff"} />
+      <Shape el={{ shape: nest.outer, fill: nest.outerFill }} cx={57} cy={57} size={62} />
+      <Shape el={{ shape: nest.inner, fill: "white" }} cx={57} cy={57} size={28} />
+      <Shape el={{ shape: nest.corner, fill: "white" }} cx={14} cy={14} size={17} />
+    </>
+  );
+}
+
+// PLUSCROSS: five framed tiles in a plus. slots = [top, left, right, centreArrow,
+// face]; `dots` draws under the face. Each tile is a bordered rounded square.
+function PlusCrossPanel({ slots, dots }: { slots: (Element | null)[]; dots?: number }) {
+  const t = 30, c = BOX / 2; // tile half-size and centre
+  const cells: { cx: number; cy: number; el: Element | null }[] = [
+    { cx: c, cy: 18, el: slots[0] },        // top
+    { cx: 18, cy: c, el: slots[1] },        // left
+    { cx: BOX - 18, cy: c, el: slots[2] },  // right
+    { cx: c, cy: c, el: slots[3] },         // centre (arrow)
+    { cx: c, cy: BOX - 18, el: slots[4] },  // bottom (face)
+  ];
+  return (
+    <>
+      {cells.map((cell, i) => (
+        <g key={i}>
+          <rect x={cell.cx - t / 2} y={cell.cy - t / 2} width={t} height={t} rx={3} fill="#ffffff" stroke="#c5d0de" strokeWidth={1.25} />
+          {cell.el && <Shape el={cell.el} cx={cell.cx} cy={cell.cy} size={17} />}
+        </g>
+      ))}
+      {dots !== undefined &&
+        Array.from({ length: Math.max(0, Math.min(5, dots)) }, (_, i) => {
+          const n = Math.min(5, dots);
+          return <circle key={i} cx={c + (i - (n - 1) / 2) * 7} cy={BOX - 2} r={2} fill="#111827" />;
+        })}
     </>
   );
 }
@@ -286,13 +619,31 @@ export default function AbstractPanel({ panel, size = 96 }: { panel: Panel; size
     body = <CurvesPanel curves={panel.curves ?? []} />;
   } else if (panel.layout === "composite3") {
     body = <Composite3Panel rows={panel.rows ?? []} />;
+  } else if (panel.layout === "grid3") {
+    body = <Grid3Panel slots={panel.slots} />;
+  } else if (panel.layout === "nested" && panel.nest) {
+    body = <NestedPanel nest={panel.nest} bg={panel.bg} />;
+  } else if (panel.layout === "pluscross") {
+    body = <PlusCrossPanel slots={panel.slots} dots={panel.dots} />;
+  } else if (panel.layout === "bars") {
+    body = <BarsPanel bars={panel.bars ?? []} markerBar={panel.markerBar} dots={panel.dots} />;
+  } else if (panel.layout === "rowcol") {
+    body = (
+      <RowColPanel
+        rows={panel.gridRows ?? 3}
+        cols={panel.gridCols ?? 4}
+        hiRow={panel.hiRow ?? 0}
+        hiCol={panel.hiCol ?? 0}
+        intersectColor={panel.intersectColor ?? "grey"}
+      />
+    );
   } else {
     const positions = slotPositions(panel.layout, panel.slots.length);
     const sz = shapeSize(panel.layout);
     body = panel.slots.map((el, i) => {
       if (!el) return null;
       const pos = positions[i] ?? { x: 0.5, y: 0.5 };
-      return <Shape key={i} el={el} cx={pos.x * BOX} cy={pos.y * BOX} size={sz} />;
+      return <Shape key={i} el={el} cx={pos.x * BOX} cy={pos.y * BOX} size={el.shape === "ngon" ? 54 : sz} />;
     });
   }
 
@@ -301,7 +652,7 @@ export default function AbstractPanel({ panel, size = 96 }: { panel: Panel; size
       viewBox={`0 0 ${BOX} ${BOX}`}
       width={size}
       height={size}
-      className="rounded border border-neutral-300 bg-white"
+      className="shrink-0 rounded border border-neutral-300 bg-white"
       role="img"
     >
       {body}

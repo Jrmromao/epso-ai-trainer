@@ -110,9 +110,10 @@ export default function AbstractRunner() {
           AI, so there are no faulty questions.
         </p>
         <p className="mt-2 text-sm text-neutral-500">
-          10 questions · 60s each (real EPSO pace) · pattern types: rotation,
-          counting, reflection, cross layouts, curves, 8-segment squares and
-          multi-rule composites.
+          10 questions · 60s each (real EPSO pace) · five figures in one row,
+          choose the next one from A–E. A set mixes types: a 3×3 cell grid, a
+          rotating shape, a row of shapes, a cross, a pie grid, and an 8-segment
+          square. Harder sets add figures with several rules at once.
         </p>
 
         {/* Strict (exam) mode toggle */}
@@ -205,11 +206,11 @@ export default function AbstractRunner() {
 
       {/* Sequence */}
       <p className="mt-4 font-medium">Which figure completes the pattern?</p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
         {current.sequence.map((p, i) => (
-          <AbstractPanel key={i} panel={p} size={116} />
+          <AbstractPanel key={i} panel={p} size={120} />
         ))}
-        <div className="flex h-[116px] w-[116px] items-center justify-center rounded border-2 border-dashed border-neutral-400 text-3xl text-neutral-400">
+        <div className="flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded border-2 border-dashed border-neutral-400 text-3xl text-neutral-400">
           ?
         </div>
       </div>
@@ -231,7 +232,7 @@ export default function AbstractRunner() {
               className={`flex flex-col items-center gap-1 rounded-lg border p-2 transition ${ring}`}
             >
               <span className="text-xs font-semibold text-neutral-600">{OPTION_LETTERS[i]}</span>
-              <AbstractPanel panel={p} size={100} />
+              <AbstractPanel panel={p} size={112} />
             </button>
           );
         })}
@@ -285,6 +286,9 @@ export default function AbstractRunner() {
                   <span className="font-semibold">{OPTION_LETTERS[i]}.</span>{" "}
                   {isAnswer && <span className="font-semibold">✓ correct answer — </span>}
                   {isYours && !isAnswer && <span className="font-semibold">your answer — </span>}
+                  {!isAnswer && current.optionRanks?.[i] === 0 && (
+                    <span className="mr-1 rounded bg-amber-200 px-1 text-xs font-semibold text-amber-900">most tempting trap</span>
+                  )}
                   {current.optionNotes?.[i] ?? ""}
                 </div>
               );

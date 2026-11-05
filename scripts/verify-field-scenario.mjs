@@ -25,6 +25,14 @@ const trust = buildGenerationPrompt("trustworthy-ai", 5, undefined, "hard", "en"
 check("trustworthy-ai prompt carries PR-AUC vs accuracy trap", /PR-AUC/.test(trust.user));
 check("trustworthy-ai prompt carries parity vs equalized-odds trap", /Equalized Odds/i.test(trust.user));
 
+// 1c) New genai-rag + policy named traps.
+const rag = buildGenerationPrompt("genai-rag", 5, undefined, "hard", "en");
+check("genai-rag prompt carries prompt-injection/tool-authority trap", /PROMPT-INJECTION/.test(rag.user) && /TOOL-AUTHORITY/.test(rag.user));
+check("genai-rag prompt references OWASP", /OWASP/.test(rag.user));
+check("genai-rag prompt carries fine-tune vs RAG vs prompt trap", /FINE-TUNE vs RAG vs PROMPT/.test(rag.user));
+const policy = buildGenerationPrompt("policy", 5, undefined, "hard", "en");
+check("policy prompt carries model-vs-system legal-distinction trap", /MODEL vs SYSTEM/.test(policy.user));
+
 // 2) Verbal T/F prompt does NOT get the scenario block (it has a fixed format).
 const verbal = buildGenerationPrompt("verbal", 5, undefined, "medium", "en");
 check("verbal T/F prompt has NO scenario block", !/SCENARIO FORMAT/.test(verbal.system));
