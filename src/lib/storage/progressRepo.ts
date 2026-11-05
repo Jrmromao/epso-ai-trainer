@@ -1,4 +1,4 @@
-import type { ChoiceKey, ExamComponent, Question, Topic } from "@/lib/types";
+import type { ChoiceKey, Difficulty, ExamComponent, Question, Topic } from "@/lib/types";
 
 // One recorded practice attempt at a single question. This is the atomic unit
 // the weak-area tracker aggregates over. Stored locally (IndexedDB).
@@ -9,6 +9,12 @@ export interface Attempt {
   questionId: string;
   correct: boolean;
   timestampMs: number;
+  // --- v2 analytics fields (all OPTIONAL so v1 attempts remain valid) ---
+  chosenAnswer?: ChoiceKey | null; // the option picked; null = unanswered/timed out
+  difficulty?: Difficulty; // the item's difficulty at the time of the attempt
+  durationMs?: number; // time spent on the question, if measured
+  distractorRank?: number; // plausibility rank of the chosen distractor (0 = most tempting); omit for correct/abstract
+  sessionId?: string; // groups attempts from one sitting, for within-session trend
 }
 
 // Aggregated accuracy + recency for one component or topic bucket.
@@ -32,8 +38,10 @@ export interface DueItem {
 }
 
 // Portable snapshot for JSON export/import (backup + moving machines).
+// version 2 adds the optional per-attempt analytics fields; v1 snapshots remain
+// importable (their attempts simply lack those fields).
 export interface ProgressSnapshot {
-  version: 1;
+  version: 1 | 2;
   exportedAtMs: number;
   attempts: Attempt[];
 }

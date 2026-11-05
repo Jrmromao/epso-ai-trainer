@@ -19,12 +19,22 @@ export function useProgress() {
       const attempted = records.filter((r) => r.chosen !== null);
       if (attempted.length === 0) return;
       const now = Date.now();
+      // One sessionId per finished run, so within-sitting trends can be read
+      // from the history without guessing from timestamps.
+      const sessionId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${now}-${Math.random().toString(36).slice(2, 10)}`;
       const attempts = attempted.map((r) => ({
         component: componentOverride ?? componentForTopic(r.topic),
         topic: (r.topic ?? null) as Topic | null,
         questionId: r.questionId,
         correct: r.isCorrect,
         timestampMs: now,
+        // v2 analytics: record the chosen option and the run grouping. We know
+        // these for every answered question without new per-runner plumbing.
+        chosenAnswer: r.chosen,
+        sessionId,
       }));
       getProgressRepo()
         .recordAttempts(attempts)

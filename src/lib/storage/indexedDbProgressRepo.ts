@@ -178,13 +178,14 @@ export class IndexedDbProgressRepo implements ProgressRepo {
     return { freshAttempts: all.length - migrated, migratedAttempts: migrated };
   }
 
-  async exportAll(): Promise<ProgressSnapshot> {    const db = await this.db();
+  async exportAll(): Promise<ProgressSnapshot> {
+    const db = await this.db();
     const attempts = await db.getAll(STORE);
-    return { version: 1, exportedAtMs: Date.now(), attempts };
+    return { version: 2, exportedAtMs: Date.now(), attempts };
   }
 
   async importAll(snapshot: ProgressSnapshot): Promise<{ imported: number }> {
-    if (!snapshot || snapshot.version !== 1 || !Array.isArray(snapshot.attempts)) {
+    if (!snapshot || (snapshot.version !== 1 && snapshot.version !== 2) || !Array.isArray(snapshot.attempts)) {
       throw new Error("Invalid progress snapshot");
     }
     const db = await this.db();
