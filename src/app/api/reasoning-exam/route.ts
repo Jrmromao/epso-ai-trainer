@@ -10,7 +10,7 @@ import { BYOK_HEADER } from "@/lib/userKey";
 
 // Full reasoning-exam generator: the LLM-backed sections only (verbal +
 // numerical). Abstract is generated locally on the client (no LLM). Mirrors
-// EPSO Part 1: 10 verbal + 10 numerical here, 10 abstract on the client.
+// EPSO Part 1: 20 verbal + 10 numerical here, 10 abstract on the client.
 
 const VERBAL_COUNT = 20; // official notice: verbal = 20 questions / 35 min
 const NUMERICAL_COUNT = 10; // numerical = 10 questions / 20 min
@@ -116,14 +116,15 @@ export async function POST(req: Request) {
   const language: QuestionLanguage = body.language === "pt-PT" ? "pt-PT" : "en";
   const harden = body.harden !== false;
 
-  // Verbal is a 50/50 mix of T/F and reading-comprehension to match EPSO.
-  const [verbalRc, numerical] = await Promise.all([
-    generateSection("verbal-rc", VERBAL_COUNT, difficulty, language, byokKey, harden),
+  // Live EPSO verbal is one passage, one statement, True / False / Cannot say.
+  // The four-option "which statement is correct?" drill stays on its own page.
+  const [verbal, numerical] = await Promise.all([
+    generateSection("verbal", VERBAL_COUNT, difficulty, language, byokKey, harden),
     generateSection("numerical", NUMERICAL_COUNT, difficulty, language, byokKey, harden),
   ]);
 
   return NextResponse.json({
-    verbal: shuffle(verbalRc),
+    verbal: shuffle(verbal),
     numerical: shuffle(numerical),
     difficulty,
     language,

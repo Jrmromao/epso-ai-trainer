@@ -341,8 +341,8 @@ export const SEED_QUESTIONS: Question[] = [
   },
 
   // ---------------- VERBAL — READING COMPREHENSION (seed) ----------------
-  // Real EPSO-format reference items (passage + "Which statement is correct?" +
-  // 4 full-sentence options). Explanations name each distractor's trap type —
+  // Extra drill, not the live computer-based item. The exam is one statement
+  // judged True / False / Cannot say. Explanations name each distractor's trap —
   // that naming IS the training signal for spotting them under time pressure.
   {
     id: "verbalrc-01",

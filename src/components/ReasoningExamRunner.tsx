@@ -171,8 +171,9 @@ export default function ReasoningExamRunner() {
       <div className="mt-6">
         <p className="text-neutral-600">
           A full EPSO Part 1 mock: <strong>20 verbal · 10 numerical · 10 abstract</strong>{" "}
-          (40 questions), timed to the official notice. Verbal &amp; numerical are
-          generated; abstract is generated locally. A per-section report at the end.
+          (40 questions), timed to the official notice. Verbal is True / False /
+          Cannot say. Numerical is a data table. Abstract is a five-figure series,
+          generated locally. A per-section report at the end.
         </p>
         <p className="mt-2 text-sm text-neutral-500">
           Verbal 20Q/35min · Numerical 10Q/20min · Abstract 10Q/10min.
@@ -465,11 +466,11 @@ function AbstractQ({ q, chosen, onPick, revealIdx }: { q: AbstractQuestion; chos
   return (
     <div>
       <p className="font-medium">Which figure completes the pattern?</p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
         {q.sequence.map((p, i) => (
-          <AbstractPanel key={i} panel={p} size={96} />
+          <AbstractPanel key={i} panel={p} size={108} />
         ))}
-        <div className="flex h-[96px] w-[96px] items-center justify-center rounded border-2 border-dashed border-neutral-400 text-2xl text-neutral-400">
+        <div className="flex h-[108px] w-[108px] shrink-0 items-center justify-center rounded border-2 border-dashed border-neutral-400 text-2xl text-neutral-400">
           ?
         </div>
       </div>
@@ -487,7 +488,7 @@ function AbstractQ({ q, chosen, onPick, revealIdx }: { q: AbstractQuestion; chos
               className={`flex flex-col items-center gap-1 rounded-lg border p-2 transition ${cls}`}
             >
               <span className="text-xs font-semibold text-neutral-600">{OPTION_LETTERS[i]}</span>
-              <AbstractPanel panel={p} size={82} />
+              <AbstractPanel panel={p} size={96} />
             </button>
           );
         })}

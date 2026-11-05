@@ -127,11 +127,12 @@ export default function Home() {
             wrong, especially on AI Act specifics.
           </li>
           <li>
-            This app does <strong>not</strong> prepare you for the parts most
-            likely to eliminate you: the <strong>reasoning gate</strong>{" "}
-            (verbal / numerical / abstract) and the{" "}
-            <strong>EUFTE essay</strong>. Practise those on the official EPSO
-            mocks and a validated platform &mdash; see the guide below.
+            The reasoning mock follows the notice: verbal is True / False /
+            Cannot say (20 in 35 min), numerical is a data table (10 in 20 min),
+            abstract is a five-figure series (10 in 10 min). The essay runner is
+            a 40-minute dossier graded on the five EPSO anchors. These are
+            practice items in the exam format, not official questions. Still sit
+            the official EPSO sample tests.
           </li>
           <li>
             The field MCQ is a <strong>ranking</strong> test (top scorers get the
