@@ -130,8 +130,80 @@ export const SEED_QUESTIONS: Question[] = [
     answer: "B",
     explanation: "Supervised learning uses labelled input-output pairs.",
   },
+  // Scenario + class-imbalance accuracy illusion (AD8). optionNotes carry ranks.
+  {
+    id: "ml-04",
+    topic: "ml-fundamentals",
+    difficulty: "hard",
+    language: "en",
+    stem:
+      "A fraud classifier is evaluated on a held-out set where 1% of transactions are fraudulent. It reports 99% accuracy. The team proposes deploying it on that headline figure. What is the soundest objection?",
+    choices: {
+      A: "99% accuracy is consistent with a model that never flags fraud; precision/recall or PR-AUC on the positive class must be checked.",
+      B: "Accuracy is only valid above 99.5%, so the model is marginally short of the threshold.",
+      C: "ROC-AUC would be lower than accuracy, so the model is clearly inadequate.",
+      D: "The test set is too small to report any metric.",
+    },
+    answer: "A",
+    explanation:
+      "With 1% positives, a model predicting 'never fraud' already scores 99% accuracy, so the headline is uninformative; the positive-class precision/recall or PR-AUC is what matters. B invents a threshold. C misstates the relationship (ROC-AUC is not simply 'lower than accuracy'). D is unsupported — set size isn't the issue.",
+    optionNotes: {
+      A: { verdict: "true", note: "Under heavy class imbalance, accuracy is dominated by the majority class; positive-class recall/precision or PR-AUC reveals the real performance.", rank: -1 },
+      B: { verdict: "false", note: "There is no fixed accuracy threshold; the metric itself is the wrong lens here.", rank: 1 },
+      C: { verdict: "false", note: "ROC-AUC can be misleadingly high under imbalance too; 'lower than accuracy' is not a general truth — this is the most tempting near-miss.", rank: 0 },
+      D: { verdict: "false", note: "Nothing indicates the set is too small; the problem is the metric, not the sample size.", rank: 2 },
+    },
+  },
+  // Scenario + data vs concept drift distinction.
+  {
+    id: "ml-05",
+    topic: "ml-fundamentals",
+    difficulty: "hard",
+    language: "en",
+    stem:
+      "A deployed credit model's input feature distribution is unchanged, but its error rate has climbed because the relationship between income and default shifted after a policy change. What is this, and what follows?",
+    choices: {
+      A: "Concept drift (P(Y|X) changed); retraining on fresh labelled data is needed, not just input monitoring.",
+      B: "Data drift (P(X) changed); re-scaling the inputs will restore performance.",
+      C: "Overfitting; add regularisation and redeploy.",
+      D: "Label leakage; remove the leaking feature.",
+    },
+    answer: "A",
+    explanation:
+      "The inputs are stable but the input→label relationship changed — that is concept drift (P(Y|X)), which input-distribution monitoring alone cannot catch; fresh labels and retraining are required. B describes data drift, which is explicitly ruled out. C and D are unrelated to a post-deployment relationship shift.",
+    optionNotes: {
+      A: { verdict: "true", note: "A shift in P(Y|X) with stable P(X) is concept drift; only fresh ground truth exposes it.", rank: -1 },
+      B: { verdict: "false", note: "Data drift is explicitly excluded (inputs unchanged); rescaling fixes nothing — the most tempting trap because both are 'drift'.", rank: 0 },
+      C: { verdict: "false", note: "Overfitting is a training-time generalisation failure, not a post-deployment relationship change.", rank: 1 },
+      D: { verdict: "false", note: "Leakage would have inflated validation earlier, not caused a later policy-driven shift.", rank: 2 },
+    },
+  },
+  // Leakage disguised as strong validation.
+  {
+    id: "ml-06",
+    topic: "ml-fundamentals",
+    difficulty: "medium",
+    language: "en",
+    stem:
+      "A churn model shows 0.98 validation AUC, far above production. Investigation finds a feature 'days_since_cancellation' is present in training. What happened?",
+    choices: {
+      A: "Target leakage: a feature encodes the outcome, inflating validation and collapsing in production.",
+      B: "Underfitting: the model is too simple for the data.",
+      C: "Concept drift between validation and production.",
+      D: "The validation set was simply too easy by chance.",
+    },
+    answer: "A",
+    explanation:
+      "'days_since_cancellation' can only exist after the churn event, so it leaks the label — validation looks excellent, production fails. B is the opposite symptom. C would not be explained by a specific post-outcome feature. D ignores the identified leaking feature.",
+    optionNotes: {
+      A: { verdict: "true", note: "A feature computable only after the outcome leaks the target; the validation score is an artefact.", rank: -1 },
+      B: { verdict: "false", note: "Underfitting would show low validation performance, not 0.98 AUC.", rank: 2 },
+      C: { verdict: "false", note: "Drift is plausible-sounding but does not explain a single post-outcome feature driving the gap — the main trap.", rank: 0 },
+      D: { verdict: "false", note: "The gap is explained by the leaking feature, not luck.", rank: 1 },
+    },
+  },
 
-  // ---------------- GENAI / RAG ----------------
+
   {
     id: "genai-01",
     topic: "genai-rag",
@@ -321,8 +393,56 @@ export const SEED_QUESTIONS: Question[] = [
     answer: "B",
     explanation: "Harmonisation of the internal market is the stated legal basis.",
   },
+  // Model vs system legal distinction (AD8 trap).
+  {
+    id: "policy-03",
+    topic: "policy",
+    difficulty: "hard",
+    language: "en",
+    stem:
+      "A GPAI model passes its model-level documentation assurance. It is then embedded in an AI system that acts as the safety component of a regulated product. The team wants to approve the combined deployment on the passed model-level control. How should the reviewer respond?",
+    choices: {
+      A: "Withhold deployment approval until the legally distinct AI system is separately assessed under the product-safety high-risk route.",
+      B: "Approve: the model and the system are one legal entity, so the model-level pass settles the system's classification.",
+      C: "Reject the model result as irrelevant, since a GPAI model cannot relate to a product safety component.",
+      D: "Approve as low-risk, because being a safety component keeps the product-safety route from applying.",
+    },
+    answer: "A",
+    explanation:
+      "A GPAI model and the AI system embedding it are related but legally distinct; model-level assurance cannot settle the system's classification. As a regulated product's safety component, the system can be high-risk and must be assessed separately. B collapses the distinction; C denies their relationship; D reverses the product-safety route.",
+    optionNotes: {
+      A: { verdict: "true", note: "Model assurance is narrow; the system must go through its own product-safety high-risk assessment.", rank: -1 },
+      B: { verdict: "false", note: "Model and system are distinct legal concepts; one pass cannot resolve the other — the most tempting shortcut.", rank: 0 },
+      C: { verdict: "false", note: "The two are explicitly related; calling the model irrelevant overstates the separation.", rank: 2 },
+      D: { verdict: "false", note: "Safety-component status is a reason the system CAN be high-risk, not a reason to treat it as low-risk.", rank: 1 },
+    },
+  },
+  // AI Office vs national market-surveillance enforcement scope.
+  {
+    id: "policy-04",
+    topic: "policy",
+    difficulty: "medium",
+    language: "en",
+    stem:
+      "A downstream high-risk AI system deployed in one Member State is suspected of non-compliance. Which body has primary enforcement responsibility?",
+    choices: {
+      A: "The national Market Surveillance Authority of that Member State.",
+      B: "The European AI Office, which enforces all high-risk systems directly.",
+      C: "The European Court of Justice, as first instance.",
+      D: "The provider's own compliance department, with no external authority.",
+    },
+    answer: "A",
+    explanation:
+      "National Market Surveillance Authorities enforce downstream high-risk systems; the AI Office's centralised role is focused on GPAI/systemic-risk models, not direct enforcement of every high-risk system. C is not a first-instance enforcement body; D ignores external oversight.",
+    optionNotes: {
+      A: { verdict: "true", note: "Downstream high-risk enforcement sits with national market-surveillance authorities.", rank: -1 },
+      B: { verdict: "false", note: "The AI Office centres on GPAI/systemic risk, not direct enforcement of all high-risk systems — the key scope-swap trap.", rank: 0 },
+      C: { verdict: "false", note: "The CJEU is not a first-instance market-surveillance enforcer.", rank: 1 },
+      D: { verdict: "false", note: "Self-policing with no external authority contradicts the enforcement regime.", rank: 2 },
+    },
+  },
 
-  // ---------------- VERBAL (seed) ----------------
+
   {
     id: "verbal-01",
     topic: "verbal",
@@ -339,8 +459,44 @@ export const SEED_QUESTIONS: Question[] = [
     explanation:
       "The passage states it was a 'former independent state until its union ... in 1859'. Answer only from the passage.",
   },
+  // T/F — the answer is "Cannot say": the passage neither confirms nor denies it.
+  {
+    id: "verbal-02",
+    topic: "verbal",
+    difficulty: "medium",
+    language: "en",
+    stem:
+      "Passage: 'The Rhine is one of the longest rivers in Europe and an important commercial waterway, carrying goods between the North Sea and the interior. Several countries lie along its course.'\n\nStatement: The Rhine carries more freight than any other European river.",
+    choices: {
+      A: "True",
+      B: "False",
+      C: "Cannot say",
+      D: "-",
+    },
+    answer: "C",
+    explanation:
+      "Cannot say. The passage calls the Rhine 'an important commercial waterway' but never compares its freight volume to other rivers, so a 'more than any other' claim can be neither confirmed nor denied from the text alone.",
+  },
+  // T/F — the answer is "False": the statement contradicts a qualified claim.
+  {
+    id: "verbal-03",
+    topic: "verbal",
+    difficulty: "medium",
+    language: "en",
+    stem:
+      "Passage: 'Solar panels generate electricity from daylight and can operate even under overcast skies, though their output is reduced when direct sunlight is limited.'\n\nStatement: Solar panels stop producing electricity when the sky is overcast.",
+    choices: {
+      A: "True",
+      B: "False",
+      C: "Cannot say",
+      D: "-",
+    },
+    answer: "B",
+    explanation:
+      "False. The passage says panels 'can operate even under overcast skies', with merely 'reduced' output — the opposite of 'stop producing'. The statement is a negation/overreach of the qualified claim.",
+  },
 
-  // ---------------- VERBAL — READING COMPREHENSION (seed) ----------------
+
   // Extra drill, not the live computer-based item. The exam is one statement
   // judged True / False / Cannot say. Explanations name each distractor's trap —
   // that naming IS the training signal for spotting them under time pressure.
