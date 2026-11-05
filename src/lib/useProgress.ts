@@ -31,10 +31,14 @@ export function useProgress() {
         questionId: r.questionId,
         correct: r.isCorrect,
         timestampMs: now,
-        // v2 analytics: record the chosen option and the run grouping. We know
-        // these for every answered question without new per-runner plumbing.
+        // v2 analytics: chosen option, run grouping, and (where the runner
+        // supplies them) difficulty, time-on-question and the chosen distractor's
+        // plausibility rank. Omit undefined fields so attempts stay compact.
         chosenAnswer: r.chosen,
         sessionId,
+        ...(r.difficulty !== undefined ? { difficulty: r.difficulty } : {}),
+        ...(r.durationMs !== undefined ? { durationMs: r.durationMs } : {}),
+        ...(r.distractorRank !== undefined ? { distractorRank: r.distractorRank } : {}),
       }));
       getProgressRepo()
         .recordAttempts(attempts)

@@ -72,6 +72,7 @@ export default function ExamRunner({
         chosen,
         correct: q.answer,
         isCorrect: chosen === q.answer,
+        difficulty: q.difficulty,
       };
     });
     setRecords(recs);

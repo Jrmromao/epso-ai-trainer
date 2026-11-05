@@ -31,5 +31,27 @@ const incoming = [v1Attempt, v2Attempt];
 const imported = incoming.filter((a) => a && typeof a.id === "string" && !existing.has(a.id)).length;
 check("import dedups by id (adds only the new one)", imported === 1, `imported=${imported}`);
 
+// Mirror useProgress.recordRun's record->attempt mapping: optional fields are
+// OMITTED when undefined (compact attempts), present when supplied.
+const mapAttempt = (r, sessionId, now) => ({
+  component: "field-ai",
+  topic: r.topic ?? null,
+  questionId: r.questionId,
+  correct: r.isCorrect,
+  timestampMs: now,
+  chosenAnswer: r.chosen,
+  sessionId,
+  ...(r.difficulty !== undefined ? { difficulty: r.difficulty } : {}),
+  ...(r.durationMs !== undefined ? { durationMs: r.durationMs } : {}),
+  ...(r.distractorRank !== undefined ? { distractorRank: r.distractorRank } : {}),
+});
+const full = mapAttempt({ questionId: "q", topic: "mlops", chosen: "B", isCorrect: false, difficulty: "hard", durationMs: 31000 }, "s", 100);
+check("mapped attempt carries difficulty + durationMs", full.difficulty === "hard" && full.durationMs === 31000);
+check("mapped attempt carries chosenAnswer + sessionId", full.chosenAnswer === "B" && full.sessionId === "s");
+const sparse = mapAttempt({ questionId: "q2", topic: "ai-act", chosen: "A", isCorrect: true }, "s", 100);
+check("absent difficulty is OMITTED (not undefined key)", !("difficulty" in sparse));
+check("absent durationMs is OMITTED", !("durationMs" in sparse));
+check("absent distractorRank is OMITTED", !("distractorRank" in sparse));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

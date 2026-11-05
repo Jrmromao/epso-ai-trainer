@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AnswerRecord,
   type ChoiceKey,
@@ -43,6 +43,12 @@ export default function SpacedReviewRunner({
 
   const current = questions[index];
 
+  // Start time of the current question, for durationMs.
+  const questionStartRef = useRef<number>(Date.now());
+  useEffect(() => {
+    questionStartRef.current = Date.now();
+  }, [current?.id]);
+
   const submit = useCallback(
     (pick: ChoiceKey | null) => {
       if (revealed || !current) return;
@@ -52,6 +58,8 @@ export default function SpacedReviewRunner({
         chosen: pick,
         correct: current.answer,
         isCorrect: pick === current.answer,
+        difficulty: current.difficulty,
+        durationMs: Math.max(0, Date.now() - questionStartRef.current),
       };
       setChosen(pick);
       setRevealed(true);

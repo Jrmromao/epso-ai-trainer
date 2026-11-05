@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AnswerRecord,
   type AssessmentResult,
@@ -117,6 +117,13 @@ export default function MockRunner({
 
   const current = questions[index];
 
+  // Start time of the CURRENT question, for durationMs. Reset whenever the
+  // visible question changes (including resume from a saved run).
+  const questionStartRef = useRef<number>(Date.now());
+  useEffect(() => {
+    questionStartRef.current = Date.now();
+  }, [current?.id]);
+
   // Persist run progress on every meaningful state change so a refresh / back
   // keeps the user's place and answers. Skipped once finished — the finish
   // effect clears the session after recording it to history.
@@ -143,6 +150,8 @@ export default function MockRunner({
         chosen: pick,
         correct: current.answer,
         isCorrect: pick === current.answer,
+        difficulty: current.difficulty,
+        durationMs: Math.max(0, Date.now() - questionStartRef.current),
       };
       setChosen(pick);
       setRevealed(true);

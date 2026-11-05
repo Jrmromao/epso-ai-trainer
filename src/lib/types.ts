@@ -137,6 +137,10 @@ export interface AnswerRecord {
   chosen: ChoiceKey | null;
   correct: ChoiceKey;
   isCorrect: boolean;
+  // Optional analytics (fed into the v2 Attempt record when a run is saved).
+  difficulty?: Difficulty; // the item's difficulty
+  durationMs?: number; // time the candidate spent on this question
+  distractorRank?: number; // plausibility rank of the CHOSEN wrong option (0 = most tempting)
 }
 
 // Result set passed to /api/assess for the per-test weak-topic report.
