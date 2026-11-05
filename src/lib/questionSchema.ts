@@ -44,10 +44,10 @@ function parseTable(raw: unknown): QuestionTable | undefined {
 function parseOptionNotes(
   raw: unknown,
   choices: Choices,
-): Partial<Record<ChoiceKey, { verdict: "true" | "false"; note: string }>> | undefined {
+): Partial<Record<ChoiceKey, { verdict: "true" | "false"; note: string; rank?: number }>> | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   const src = raw as Record<string, unknown>;
-  const out: Partial<Record<ChoiceKey, { verdict: "true" | "false"; note: string }>> = {};
+  const out: Partial<Record<ChoiceKey, { verdict: "true" | "false"; note: string; rank?: number }>> = {};
   let any = false;
   for (const k of ["A", "B", "C", "D", "E"] as ChoiceKey[]) {
     const label = choices[k];
@@ -58,7 +58,10 @@ function parseOptionNotes(
     const verdict = e.verdict === "true" ? "true" : e.verdict === "false" ? "false" : null;
     const note = typeof e.note === "string" ? e.note.trim() : "";
     if (!verdict || !note) continue;
-    out[k] = { verdict, note };
+    // Optional temptingness rank: -1 for the correct option, 0..2 for wrong ones
+    // (0 = most tempting). Kept only when it's a sane integer.
+    const rank = typeof e.rank === "number" && Number.isInteger(e.rank) && e.rank >= -1 && e.rank <= 3 ? e.rank : undefined;
+    out[k] = rank === undefined ? { verdict, note } : { verdict, note, rank };
     any = true;
   }
   return any ? out : undefined;
@@ -604,8 +607,8 @@ function placeAnswer(q: Question, targetSlot?: ChoiceKey): Question {
   // Per-option notes are keyed by letter and tied to option CONTENT, so remap
   // their keys to follow the shuffled positions.
   if (q.optionNotes) {
-    const movedNotes: Partial<Record<ChoiceKey, { verdict: "true" | "false"; note: string }>> = {};
-    for (const [from, note] of Object.entries(q.optionNotes) as [ChoiceKey, { verdict: "true" | "false"; note: string }][]) {
+    const movedNotes: Partial<Record<ChoiceKey, { verdict: "true" | "false"; note: string; rank?: number }>> = {};
+    for (const [from, note] of Object.entries(q.optionNotes) as [ChoiceKey, { verdict: "true" | "false"; note: string; rank?: number }][]) {
       const to = remap[from] ?? from;
       movedNotes[to] = { ...note, note: remapLetters(note.note, remap) };
     }
@@ -985,7 +988,12 @@ export function buildGenerationPrompt(
       " CONCEPT as it applies to THIS scenario — for the correct option why it is" +
       " the right call here, and for each wrong option which specific concept it" +
       " misapplies or which obligation/threshold/scope it gets wrong in this" +
-      " situation. These power a per-option learn-mode breakdown."
+      " situation. ALSO add to each note object a \"rank\" integer: the correct" +
+      " option has rank -1; the three WRONG options are ranked by how TEMPTING" +
+      " they are — 0 = the most plausible trap (the answer a well-prepared" +
+      " candidate is most likely to pick by mistake), 1 = next, 2 = easiest to" +
+      " reject. Use each of 0,1,2 exactly once across the wrong options. These" +
+      " power a per-option learn-mode breakdown and trap-susceptibility analytics."
     : "";
 
   // Language note: field MCQ is always English (Language 2 in the real EPSO exam).
@@ -1001,7 +1009,7 @@ export function buildGenerationPrompt(
       '{"questions":[{"stem":string,"table":{"caption":string,"headers":string[],"rows":string[][]}|null,' +
       '"choices":{"A":string,"B":string,"C":string,"D":string},' +
       '"answer":"A"|"B"|"C"|"D","difficulty":"easy"|"medium"|"hard","language":string,"explanation":string,' +
-      '"optionNotes":{"A":{"verdict":"true"|"false","note":string},"B":{...},"C":{...},"D":{...}}' +
+      '"optionNotes":{"A":{"verdict":"true"|"false","note":string,"rank":number},"B":{...},"C":{...},"D":{...}}' +
       '}]}. Include "table" ONLY for exhibit items; omit it or set null otherwise. No prose outside the JSON.'
     : "Output ONLY a JSON object of the form " +
       '{"questions":[{"stem":string,"choices":{"A":string,"B":string,"C":string,"D":string},' +

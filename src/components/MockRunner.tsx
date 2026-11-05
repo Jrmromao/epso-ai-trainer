@@ -152,6 +152,11 @@ export default function MockRunner({
         isCorrect: pick === current.answer,
         difficulty: current.difficulty,
         durationMs: Math.max(0, Date.now() - questionStartRef.current),
+        // temptingness of the chosen WRONG option (0 = most tempting), when the
+        // generator supplied per-option ranks. Omitted for correct answers.
+        ...(pick && pick !== current.answer && typeof current.optionNotes?.[pick]?.rank === "number"
+          ? { distractorRank: current.optionNotes[pick]!.rank }
+          : {}),
       };
       setChosen(pick);
       setRevealed(true);

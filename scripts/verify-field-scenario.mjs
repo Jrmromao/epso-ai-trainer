@@ -106,5 +106,30 @@ check("exactly one TRUE verdict", Object.values(q.optionNotes).filter((n) => n.v
 check("TRUE verdict is on the correct answer slot", q.optionNotes[q.answer]?.verdict === "true", `answer=${q.answer}`);
 check("prevSlot=A respected (not A)", q.answer !== "A", `answer=${q.answer}`);
 
+// 1f) optionNotes RANK: prompt asks for it, and a parsed item keeps ranks
+// aligned to options after position-balancing (the correct slot keeps rank -1).
+check("field prompt requests a temptingness rank", /"rank":number/.test(field.system) && /most plausible trap/.test(field.system));
+const ranked = JSON.stringify({ questions: [{
+  stem: "A deployer of a high-risk AI system notices its logging has silently failed for a week. What should they do first?",
+  choices: {
+    A: "Restore logging and preserve/record the gap, then assess impact — logging is a deployer duty under the AI Act.",
+    B: "Do nothing; logging is solely the provider's responsibility.",
+    C: "Switch the system off permanently to be safe.",
+    D: "Delete the incomplete logs so the record looks consistent.",
+  },
+  answer: "A", difficulty: "hard", language: "en",
+  explanation: "A is correct: deployers must keep logs; restore and record the gap. B wrong (deployer duty). C overreaction. D is tampering.",
+  optionNotes: {
+    A: { verdict: "true", note: "Deployers must ensure logging and address gaps.", rank: -1 },
+    B: { verdict: "false", note: "Confuses provider and deployer duties — the most tempting trap here.", rank: 0 },
+    C: { verdict: "false", note: "Disproportionate; not required.", rank: 1 },
+    D: { verdict: "false", note: "Tampering with records is clearly wrong.", rank: 2 },
+  },
+}] });
+const rq = parseQuestions(ranked, "ai-act", "hard", "en", { mode: "balance", prevSlot: "C" })[0];
+check("rank preserved on correct option = -1", rq.optionNotes[rq.answer]?.rank === -1, `rank=${rq.optionNotes[rq.answer]?.rank}`);
+const wrongRanks = Object.entries(rq.optionNotes).filter(([k]) => k !== rq.answer).map(([, n]) => n.rank).sort();
+check("wrong options keep ranks 0,1,2 after balancing", JSON.stringify(wrongRanks) === "[0,1,2]", JSON.stringify(wrongRanks));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
